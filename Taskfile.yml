@@ -1,0 +1,39 @@
+version: '3'
+
+tasks:
+  fetch:
+    desc: Fetch all execution environments from AAP and save to outputs/execution_environments.json
+    cmds:
+      - uv run aap-ee-fetch
+
+  inspect:
+    desc: Pull and inspect each unique EE image with podman, save to outputs/execution_environment_details.json
+    cmds:
+      - uv run aap-ee-inspect {{.CLI_ARGS}}
+
+  report:
+    desc: Generate outputs/execution_environment_report.md from inspection details
+    cmds:
+      - uv run aap-ee-report {{.CLI_ARGS}}
+
+  all:
+    desc: "Run the full pipeline: fetch, inspect, report"
+    cmds:
+      - task: fetch
+      - task: inspect
+      - task: report
+
+  lint:
+    desc: Run ruff lint checks
+    cmds:
+      - uv run ruff check src/ tests/
+
+  format:
+    desc: Format code with ruff
+    cmds:
+      - uv run ruff format src/ tests/
+
+  test:
+    desc: Run tests
+    cmds:
+      - uv run pytest
