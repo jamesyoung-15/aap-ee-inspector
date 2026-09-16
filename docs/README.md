@@ -1,14 +1,33 @@
 # Architecture
 
-This tool is a 3-stage pipeline. Each stage reads the previous stage's output
-from `outputs/` and can be re-run independently.
+This tool is a 3-stage pipeline. Each stage reads the previous stage's most
+recently generated output from `outputs/` and can be re-run independently.
 
 ```
 main.py                          inspect_execution_environments.py       generate_report.py
   (AAP API)                        (podman pull/run per image)             (JSON -> Markdown)
      |                                      |                                      |
      v                                      v                                      v
-outputs/execution_environments.json -> outputs/execution_environment_details.json -> outputs/execution_environment_report.md
+<ts>_execution_environments.json -> <ts>_execution_environment_details.json -> <ts>_execution_environment_report.md
+```
+
+## Timestamped outputs
+
+Every run writes a **new** file rather than overwriting the previous one:
+`outputs/<YYYYMMDDTHHMMSS>_<filename>`, e.g.
+`outputs/20260916T171548_execution_environments.json`. This keeps a history
+of past runs for comparison and avoids accidentally clobbering data from a
+long-running `aap-ee-inspect` pass.
+
+`aap-ee-inspect` and `aap-ee-report` each need an input file from the
+previous stage. By default they auto-select the **most recently generated**
+matching file in the output directory (filenames sort chronologically, so
+this is just picking the lexicographically largest match). To target a
+specific historical run instead, pass `--input`:
+
+```
+aap-ee-inspect --input outputs/20260101T120000_execution_environments.json
+aap-ee-report --input outputs/20260101T120000_execution_environment_details.json
 ```
 
 ## Stage 1: `main.py` (entry point: `aap-ee-fetch`)
@@ -21,13 +40,13 @@ the `next` link until exhausted.
 - TLS verification is disabled (`verify=False`) since the AAP host uses an
   internal/self-signed certificate not present in the default trust store.
 - Output fields are trimmed to `config.toml`'s `[output].fields` (currently
-  `name`, `image`, `description`) before writing to
-  `outputs/execution_environments.json`. Remove/comment out `fields` in
+  `name`, `image`, `description`) before writing to a new timestamped
+  `execution_environments.json`. Remove/comment out `fields` in
   `config.toml` to dump full records instead.
 
 ## Stage 2: `inspect_execution_environments.py` (entry point: `aap-ee-inspect`)
 
-For each **unique image** referenced in stage 1's output (multiple EE names
+For each **unique image** referenced in the input file (multiple EE names
 can point at the same image), excluding any matched by `config.toml`'s
 `[exclusions]` section, this stage:
 
@@ -91,11 +110,11 @@ installed). The Python version must be parsed from `ansible --version`'s
 
 ## Stage 3: `generate_report.py` (entry point: `aap-ee-report`)
 
-Renders `outputs/execution_environment_details.json` into a single Markdown
-file for quick human reference — one `##` section per unique image, with
-collections listed in a fenced code block (one per line, sorted
-alphabetically). Successful inspections are listed first; failed/skipped
-images are grouped in a trailing section.
+Renders the latest (or `--input`-specified) execution environment details
+file into a single timestamped Markdown file for quick human reference —
+one `##` section per unique image, with collections listed in a fenced code
+block (one per line, sorted alphabetically). Successful inspections are
+listed first; failed/skipped images are grouped in a trailing section.
 
 ## Data models (`models.py`)
 

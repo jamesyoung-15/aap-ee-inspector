@@ -8,11 +8,12 @@ Usage:
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from urllib.parse import urljoin
 
 import httpx
 
-from aap_ee_inspector.app_config import AppConfig, load_config
+from aap_ee_inspector.app_config import AppConfig, current_timestamp, load_config
 from aap_ee_inspector.config import Settings
 from aap_ee_inspector.models import (
     ExecutionEnvironment,
@@ -50,12 +51,17 @@ def fetch_all_execution_environments(
     return results
 
 
-def save_results(results: list[ExecutionEnvironment], config: AppConfig) -> None:
-    """Write results to config.output_file as JSON, limited to config.output_fields."""
+def save_results(results: list[ExecutionEnvironment], config: AppConfig) -> Path:
+    """Write results to a new timestamped file, limited to config.output_fields.
+
+    Returns the path written to.
+    """
     config.output.dir.mkdir(parents=True, exist_ok=True)
+    output_file = config.new_output_file(current_timestamp())
     payload = [ee.model_dump(mode="json", include=config.output_fields) for ee in results]
-    config.output_file.write_text(json.dumps(payload, indent=2))
-    print(f"Saved {len(results)} execution environments to {config.output_file}")
+    output_file.write_text(json.dumps(payload, indent=2))
+    print(f"Saved {len(results)} execution environments to {output_file}")
+    return output_file
 
 
 def main() -> None:

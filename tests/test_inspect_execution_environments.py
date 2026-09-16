@@ -15,6 +15,7 @@ from aap_ee_inspector.inspect_execution_environments import (
     load_images,
     parse_ansible_version_block,
     parse_collections_block,
+    resolve_input_file,
 )
 
 SAMPLE_ANSIBLE_VERSION_OUTPUT = """ansible [core 2.16.17]
@@ -101,20 +102,13 @@ class TestIsExcluded:
 
 
 class TestLoadImages:
-    def _write_records(self, tmp_path, records):
-        output_dir = tmp_path / "outputs"
-        output_dir.mkdir()
-        config = AppConfig(output=OutputConfig(dir=output_dir))
-        config.output_file.write_text(json.dumps(records))
-        return config
-
-    def test_raises_if_execution_environments_file_missing(self, tmp_path):
-        config = AppConfig(output=OutputConfig(dir=tmp_path / "outputs"))
-        with pytest.raises(FileNotFoundError):
-            load_images(config)
+    def _write_records_file(self, tmp_path, records, filename="input.json"):
+        path = tmp_path / filename
+        path.write_text(json.dumps(records))
+        return path
 
     def test_groups_names_by_image(self, tmp_path):
-        config = self._write_records(
+        path = self._write_records_file(
             tmp_path,
             [
                 {"name": "EE-A", "image": "shared-image"},
@@ -122,32 +116,65 @@ class TestLoadImages:
                 {"name": "EE-C", "image": "other-image"},
             ],
         )
-        images = load_images(config)
+        images = load_images(path, AppConfig())
         assert images == {
             "shared-image": ["EE-A", "EE-B"],
             "other-image": ["EE-C"],
         }
 
     def test_applies_config_exclusions(self, tmp_path):
-        config = self._write_records(
+        path = self._write_records_file(
             tmp_path,
             [
                 {"name": "keep-me", "image": "img-1"},
                 {"name": "rhel6_env:1.0", "image": "img-2"},
             ],
         )
-        config.exclusions.name_patterns.append("rhel6_env:*")
+        config = AppConfig(exclusions=ExclusionsConfig(name_patterns=["rhel6_env:*"]))
 
-        images = load_images(config)
+        images = load_images(path, config)
         assert images == {"img-1": ["keep-me"]}
 
     def test_only_narrows_after_exclusions(self, tmp_path):
-        config = self._write_records(
+        path = self._write_records_file(
             tmp_path,
             [
                 {"name": "vmware_env:1.0", "image": "img-1"},
                 {"name": "amfam_default:1.1", "image": "img-2"},
             ],
         )
-        images = load_images(config, only=["vmware_env:*"])
+        images = load_images(path, AppConfig(), only=["vmware_env:*"])
         assert images == {"img-1": ["vmware_env:1.0"]}
+
+
+class TestResolveInputFile:
+    def test_raises_if_nothing_found_and_no_explicit_path(self, tmp_path):
+        config = AppConfig(output=OutputConfig(dir=tmp_path / "outputs"))
+        with pytest.raises(FileNotFoundError):
+            resolve_input_file(config, explicit_path=None)
+
+    def test_raises_if_explicit_path_missing(self, tmp_path):
+        config = AppConfig(output=OutputConfig(dir=tmp_path))
+        with pytest.raises(FileNotFoundError):
+            resolve_input_file(config, explicit_path=str(tmp_path / "nope.json"))
+
+    def test_explicit_path_takes_precedence_over_latest(self, tmp_path):
+        output_dir = tmp_path / "outputs"
+        output_dir.mkdir()
+        (output_dir / "20260101T000000_execution_environments.json").write_text("[]")
+        explicit = tmp_path / "custom.json"
+        explicit.write_text("[]")
+
+        config = AppConfig(output=OutputConfig(dir=output_dir))
+        result = resolve_input_file(config, explicit_path=str(explicit))
+        assert result == explicit
+
+    def test_picks_latest_when_no_explicit_path(self, tmp_path):
+        output_dir = tmp_path / "outputs"
+        output_dir.mkdir()
+        (output_dir / "20260101T000000_execution_environments.json").write_text("[]")
+        (output_dir / "20260601T000000_execution_environments.json").write_text("[]")
+
+        config = AppConfig(output=OutputConfig(dir=output_dir))
+        result = resolve_input_file(config, explicit_path=None)
+        assert result.name == "20260601T000000_execution_environments.json"

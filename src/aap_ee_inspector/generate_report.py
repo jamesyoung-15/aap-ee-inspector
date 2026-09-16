@@ -8,32 +8,50 @@ themselves.
 Usage:
     aap-ee-report
     aap-ee-report --only "amfam_default:1.21,vmware_env:*"
+    aap-ee-report --input outputs/20260101T120000_execution_environment_details.json
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
-from aap_ee_inspector.app_config import AppConfig, load_config
+from aap_ee_inspector.app_config import AppConfig, current_timestamp, load_config
 from aap_ee_inspector.filters import matches_any, parse_csv_patterns
 from aap_ee_inspector.models import ExecutionEnvironmentDetails
 
 
+def resolve_input_file(config: AppConfig, explicit_path: str | None) -> Path:
+    """Resolve which execution_environment_details.json to read.
+
+    Uses `explicit_path` if given, otherwise the most recently generated
+    timestamped file in the output directory.
+    """
+    if explicit_path is not None:
+        path = Path(explicit_path)
+        if not path.exists():
+            raise FileNotFoundError(f"{path} not found.")
+        return path
+
+    latest = config.latest_details_output_file()
+    if latest is None:
+        raise FileNotFoundError(
+            f"No execution_environment_details.json found in {config.output.dir}. "
+            "Run `aap-ee-inspect` first."
+        )
+    return latest
+
+
 def load_details(
-    config: AppConfig, only: list[str] | None = None
+    input_file: Path, only: list[str] | None = None
 ) -> list[ExecutionEnvironmentDetails]:
-    """Load and validate execution_environment_details.json.
+    """Load and validate `input_file`.
 
     If `only` is given, results are narrowed to entries where at least one
     associated EE name matches one of the glob patterns.
     """
-    if not config.details_output_file.exists():
-        raise FileNotFoundError(
-            f"{config.details_output_file} not found. Run `aap-ee-inspect` first."
-        )
-
-    raw = json.loads(config.details_output_file.read_text())
+    raw = json.loads(input_file.read_text())
     all_details = [ExecutionEnvironmentDetails.model_validate(item) for item in raw]
 
     if only is None:
@@ -102,11 +120,13 @@ def render_report(all_details: list[ExecutionEnvironmentDetails]) -> str:
     return "\n".join(sections)
 
 
-def save_report(markdown: str, config: AppConfig) -> None:
-    """Write the rendered Markdown to config.report_output_file."""
+def save_report(markdown: str, config: AppConfig) -> Path:
+    """Write the rendered Markdown to a new timestamped file. Returns the path written to."""
     config.output.dir.mkdir(parents=True, exist_ok=True)
-    config.report_output_file.write_text(markdown)
-    print(f"Saved report to {config.report_output_file}")
+    report_file = config.new_report_output_file(current_timestamp())
+    report_file.write_text(markdown)
+    print(f"Saved report to {report_file}")
+    return report_file
 
 
 def parse_args() -> argparse.Namespace:
@@ -120,6 +140,14 @@ def parse_args() -> argparse.Namespace:
             'in the report. Example: --only "amfam_default:1.21,vmware_env:*"'
         ),
     )
+    parser.add_argument(
+        "--input",
+        metavar="PATH",
+        help=(
+            "Path to a specific execution_environment_details.json to read. "
+            "Defaults to the most recently generated file in the output directory."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -129,7 +157,10 @@ def main() -> None:
     only = parse_csv_patterns(args.only)
 
     config = load_config()
-    all_details = load_details(config, only=only)
+    input_file = resolve_input_file(config, args.input)
+    print(f"Reading execution environment details from {input_file}")
+
+    all_details = load_details(input_file, only=only)
     markdown = render_report(all_details)
     save_report(markdown, config)
 

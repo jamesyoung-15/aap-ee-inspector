@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from aap_ee_inspector.app_config import AppConfig, load_config
+from aap_ee_inspector.app_config import AppConfig, OutputConfig, find_latest_file, load_config
 
 
 class TestAppConfigDefaults:
@@ -19,11 +19,49 @@ class TestAppConfigDefaults:
         assert config.exclusions.images == []
         assert config.exclusions.name_patterns == []
 
-    def test_output_file_paths_are_derived_from_output_dir(self):
+    def test_new_output_file_paths_include_timestamp(self):
         config = AppConfig()
-        assert config.output_file == Path("outputs/execution_environments.json")
-        assert config.details_output_file == Path("outputs/execution_environment_details.json")
-        assert config.report_output_file == Path("outputs/execution_environment_report.md")
+        assert config.new_output_file("20260101T120000") == Path(
+            "outputs/20260101T120000_execution_environments.json"
+        )
+        assert config.new_details_output_file("20260101T120000") == Path(
+            "outputs/20260101T120000_execution_environment_details.json"
+        )
+        assert config.new_report_output_file("20260101T120000") == Path(
+            "outputs/20260101T120000_execution_environment_report.md"
+        )
+
+    def test_latest_output_file_is_none_when_dir_missing(self, tmp_path):
+        config = AppConfig(output=OutputConfig(dir=tmp_path / "does_not_exist"))
+        assert config.latest_output_file() is None
+        assert config.latest_details_output_file() is None
+
+    def test_latest_output_file_returns_most_recent_by_timestamp(self, tmp_path):
+        config = AppConfig(output=OutputConfig(dir=tmp_path))
+        (tmp_path / "20260101T120000_execution_environments.json").write_text("[]")
+        (tmp_path / "20260215T090000_execution_environments.json").write_text("[]")
+
+        latest = config.latest_output_file()
+        assert latest is not None
+        assert latest.name == "20260215T090000_execution_environments.json"
+
+
+class TestFindLatestFile:
+    def test_returns_none_for_missing_directory(self, tmp_path):
+        assert find_latest_file(tmp_path / "missing", "foo.json") is None
+
+    def test_returns_none_when_no_files_match(self, tmp_path):
+        (tmp_path / "unrelated.txt").write_text("")
+        assert find_latest_file(tmp_path, "foo.json") is None
+
+    def test_picks_lexicographically_latest_match(self, tmp_path):
+        (tmp_path / "20260101T000000_foo.json").write_text("")
+        (tmp_path / "20261231T235959_foo.json").write_text("")
+        (tmp_path / "20260601T000000_foo.json").write_text("")
+
+        result = find_latest_file(tmp_path, "foo.json")
+        assert result is not None
+        assert result.name == "20261231T235959_foo.json"
 
 
 class TestLoadConfig:

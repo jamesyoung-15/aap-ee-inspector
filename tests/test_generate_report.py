@@ -9,6 +9,7 @@ from aap_ee_inspector.generate_report import (
     load_details,
     render_entry,
     render_report,
+    resolve_input_file,
 )
 from aap_ee_inspector.models import ExecutionEnvironmentDetails
 
@@ -88,45 +89,71 @@ class TestRenderReport:
 
 
 class TestLoadDetails:
-    def _write_details(self, tmp_path, entries):
-        output_dir = tmp_path / "outputs"
-        output_dir.mkdir()
-        config = AppConfig(output=OutputConfig(dir=output_dir))
+    def _write_details_file(self, tmp_path, entries, filename="details.json"):
+        path = tmp_path / filename
         payload = [ExecutionEnvironmentDetails(**e).model_dump(mode="json") for e in entries]
-        config.details_output_file.write_text(json.dumps(payload))
-        return config
-
-    def test_raises_if_details_file_missing(self, tmp_path):
-        config = AppConfig(output=OutputConfig(dir=tmp_path / "outputs"))
-        with pytest.raises(FileNotFoundError):
-            load_details(config)
+        path.write_text(json.dumps(payload))
+        return path
 
     def test_loads_all_entries_when_no_filter(self, tmp_path):
-        config = self._write_details(
+        path = self._write_details_file(
             tmp_path,
             [
                 {"names": ["EE-1"], "image": "img-1"},
                 {"names": ["EE-2"], "image": "img-2"},
             ],
         )
-        assert len(load_details(config)) == 2
+        assert len(load_details(path)) == 2
 
     def test_only_filters_by_name_pattern(self, tmp_path):
-        config = self._write_details(
+        path = self._write_details_file(
             tmp_path,
             [
                 {"names": ["vmware_env:1.0"], "image": "img-1"},
                 {"names": ["amfam_default:1.1"], "image": "img-2"},
             ],
         )
-        result = load_details(config, only=["vmware_env:*"])
+        result = load_details(path, only=["vmware_env:*"])
         assert len(result) == 1
         assert result[0].names == ["vmware_env:1.0"]
 
     def test_only_matches_if_any_name_matches(self, tmp_path):
-        config = self._write_details(
+        path = self._write_details_file(
             tmp_path,
             [{"names": ["EE-1", "EE-2"], "image": "img-1"}],
         )
-        result = load_details(config, only=["EE-2"])
+        result = load_details(path, only=["EE-2"])
         assert len(result) == 1
+
+
+class TestResolveInputFile:
+    def test_raises_if_nothing_found_and_no_explicit_path(self, tmp_path):
+        config = AppConfig(output=OutputConfig(dir=tmp_path / "outputs"))
+        with pytest.raises(FileNotFoundError):
+            resolve_input_file(config, explicit_path=None)
+
+    def test_raises_if_explicit_path_missing(self, tmp_path):
+        config = AppConfig(output=OutputConfig(dir=tmp_path))
+        with pytest.raises(FileNotFoundError):
+            resolve_input_file(config, explicit_path=str(tmp_path / "nope.json"))
+
+    def test_explicit_path_takes_precedence_over_latest(self, tmp_path):
+        output_dir = tmp_path / "outputs"
+        output_dir.mkdir()
+        (output_dir / "20260101T000000_execution_environment_details.json").write_text("[]")
+        explicit = tmp_path / "custom.json"
+        explicit.write_text("[]")
+
+        config = AppConfig(output=OutputConfig(dir=output_dir))
+        result = resolve_input_file(config, explicit_path=str(explicit))
+        assert result == explicit
+
+    def test_picks_latest_when_no_explicit_path(self, tmp_path):
+        output_dir = tmp_path / "outputs"
+        output_dir.mkdir()
+        (output_dir / "20260101T000000_execution_environment_details.json").write_text("[]")
+        (output_dir / "20260601T000000_execution_environment_details.json").write_text("[]")
+
+        config = AppConfig(output=OutputConfig(dir=output_dir))
+        result = resolve_input_file(config, explicit_path=None)
+        assert result.name == "20260601T000000_execution_environment_details.json"

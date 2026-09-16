@@ -9,11 +9,19 @@ commit to version control and tweak per-environment without touching code
 from __future__ import annotations
 
 import tomllib
+from datetime import datetime
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
 DEFAULT_CONFIG_PATH = Path("config.toml")
+
+# Filename timestamp format: sorts lexicographically in chronological order.
+TIMESTAMP_FORMAT = "%Y%m%dT%H%M%S"
+
+EXECUTION_ENVIRONMENTS_SUFFIX = "execution_environments.json"
+DETAILS_SUFFIX = "execution_environment_details.json"
+REPORT_SUFFIX = "execution_environment_report.md"
 
 
 class ApiConfig(BaseModel):
@@ -51,25 +59,49 @@ class AppConfig(BaseModel):
     output: OutputConfig = Field(default_factory=OutputConfig)
     exclusions: ExclusionsConfig = Field(default_factory=ExclusionsConfig)
 
-    @property
-    def output_file(self) -> Path:
-        """Path to the raw AAP execution environment list."""
-        return self.output.dir / "execution_environments.json"
+    def new_output_file(self, timestamp: str) -> Path:
+        """Path for a new, timestamped execution_environments.json."""
+        return self.output.dir / f"{timestamp}_{EXECUTION_ENVIRONMENTS_SUFFIX}"
 
-    @property
-    def details_output_file(self) -> Path:
-        """Path to the per-image inspection details."""
-        return self.output.dir / "execution_environment_details.json"
+    def new_details_output_file(self, timestamp: str) -> Path:
+        """Path for a new, timestamped execution_environment_details.json."""
+        return self.output.dir / f"{timestamp}_{DETAILS_SUFFIX}"
 
-    @property
-    def report_output_file(self) -> Path:
-        """Path to the generated Markdown report."""
-        return self.output.dir / "execution_environment_report.md"
+    def new_report_output_file(self, timestamp: str) -> Path:
+        """Path for a new, timestamped execution_environment_report.md."""
+        return self.output.dir / f"{timestamp}_{REPORT_SUFFIX}"
+
+    def latest_output_file(self) -> Path | None:
+        """Most recent existing execution_environments.json, or None if none exist."""
+        return find_latest_file(self.output.dir, EXECUTION_ENVIRONMENTS_SUFFIX)
+
+    def latest_details_output_file(self) -> Path | None:
+        """Most recent existing execution_environment_details.json, or None if none exist."""
+        return find_latest_file(self.output.dir, DETAILS_SUFFIX)
 
     @property
     def output_fields(self) -> set[str] | None:
         """Output fields as a set, or None to include everything."""
         return set(self.output.fields) if self.output.fields else None
+
+
+def current_timestamp() -> str:
+    """Return the current time formatted for use in output filenames."""
+    return datetime.now().strftime(TIMESTAMP_FORMAT)
+
+
+def find_latest_file(directory: Path, suffix: str) -> Path | None:
+    """Find the most recently generated `<timestamp>_<suffix>` file in `directory`.
+
+    Filenames sort lexicographically in chronological order (the timestamp
+    format has no ambiguity), so the max() of matching names is the latest.
+    Returns None if the directory doesn't exist or has no matching files.
+    """
+    if not directory.exists():
+        return None
+
+    matches = sorted(directory.glob(f"*_{suffix}"))
+    return matches[-1] if matches else None
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
