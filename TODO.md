@@ -2,7 +2,15 @@
 
 ## Podman + Docker compatibility
 
-Right now we only support Podman, perhaps an option for Docker as well? Commands should be compatible.
+~~Right now we only support Podman, perhaps an option for Docker as well? Commands should be compatible.~~
+
+Done: `config.toml`'s `[container].engine` selects `"podman"` (default) or
+`"docker"`; both share compatible `pull`/`run --rm`/`rmi` CLI syntax so it's
+a drop-in swap. Note: implemented as a hypothetical/config-level switch and
+verified that the correct binary is invoked and failures are handled
+gracefully (tested against a stopped Docker daemon), but not exercised
+through a full successful pull/inspect/cleanup cycle against a running
+Docker daemon.
 
 ## Filtered/Single EE Report
 

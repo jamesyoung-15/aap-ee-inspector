@@ -5,7 +5,7 @@ recently generated output from `outputs/` and can be re-run independently.
 
 ```
 main.py                          inspect_execution_environments.py       generate_report.py
-  (AAP API)                        (podman pull/run per image)             (JSON -> Markdown)
+  (AAP API)                        (podman/docker pull/run per image)      (JSON -> Markdown)
      |                                      |                                      |
      v                                      v                                      v
 <ts>_execution_environments.json -> <ts>_execution_environment_details.json -> <ts>_execution_environment_report.md
@@ -50,14 +50,31 @@ For each **unique image** referenced in the input file (multiple EE names
 can point at the same image), excluding any matched by `config.toml`'s
 `[exclusions]` section, this stage:
 
-1. `podman pull <image>`
+1. `<engine> pull <image>`
 2. Runs `ansible --version` and `ansible-galaxy collection list --format json`
-   inside a throwaway container in a single `podman run --rm` invocation.
+   inside a throwaway container in a single `<engine> run --rm` invocation.
 3. Parses ansible-core / Python / jinja versions out of the `ansible --version`
    text output via regex (there is no JSON output mode for `--version`).
 4. Parses and flattens the collection-list JSON into a single
    `{name: version}` dict.
-5. `podman rmi <image>` to reclaim disk space (images can be several GB each).
+5. `<engine> rmi <image>` to reclaim disk space (images can be several GB each).
+
+Where `<engine>` is `config.toml`'s `[container].engine` (`podman` by
+default). Podman and Docker use compatible `pull`/`run --rm`/`rmi` command
+syntax, so this is a drop-in swap:
+
+```toml
+[container]
+engine = "docker"  # or "podman" (default)
+```
+
+Docker support was implemented as a straightforward swap of the CLI binary
+name rather than exhaustively tested end-to-end (development environment
+didn't have a running Docker daemon at the time); the failure path was
+verified though — with the Docker daemon not running, `pull_image` correctly
+invokes `docker pull`, receives Docker's connection error, and records it
+as a per-image `error` exactly like a podman failure would, without
+crashing the run.
 
 Failures at any step (pull or inspect) are recorded on that image's result
 entry (`error` field) rather than aborting the whole batch — one bad image
@@ -143,7 +160,13 @@ Two separate configuration sources, intentionally kept apart:
 
 - **Platform emulation**: on non-x86_64 hosts (e.g. Apple Silicon), pulling
   `linux/amd64` images requires QEMU emulation, which is slower than native
-  execution but works transparently through podman.
+  execution but works transparently through podman/docker.
 - Known-unreachable/unsupported images (registry auth gaps, old
   `ansible-galaxy` versions) should be added to `config.toml`'s
   `[exclusions]` rather than left to fail every run.
+- **Docker support is unverified end-to-end**: the `[container].engine`
+  toggle is a straightforward CLI-binary swap (podman and Docker share
+  compatible `pull`/`run --rm`/`rmi` syntax), but has only been confirmed to
+  invoke the right binary and fail gracefully when the Docker daemon isn't
+  running — not a full successful pull/inspect/cleanup cycle against a real
+  Docker daemon.

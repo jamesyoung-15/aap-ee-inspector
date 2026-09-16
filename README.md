@@ -1,8 +1,8 @@
 # AAP EE Inspector
 
 Fetches every execution environment (EE) available in Ansible Automation
-Platform (AAP), then pulls each EE image locally with podman to inspect
-what's actually installed inside it: `ansible-core` version, Python
+Platform (AAP), then pulls each EE image locally with podman or docker to
+inspect what's actually installed inside it: `ansible-core` version, Python
 version, `jinja` version, and every Ansible collection (with version)
 baked into the image.
 
@@ -24,8 +24,9 @@ breakdown of how the pipeline works internally.
 ## Requirements
 
 - Python 3.13+ and [uv](https://docs.astral.sh/uv/)
-- [podman](https://podman.io/), authenticated (`podman login`) against any
-  registries the EE images live on
+- [podman](https://podman.io/) (default) or [docker](https://www.docker.com/),
+  authenticated (`podman login` / `docker login`) against any registries the
+  EE images live on. Set `[container].engine` in `config.toml` to switch.
 - An AAP controller API token
 
 ## Setup

@@ -11,6 +11,13 @@ dir = "outputs"
 # keep every field returned by the AAP API.
 fields = ["name", "image", "description"]
 
+[container]
+# Container engine used to pull/run/remove EE images. Must be one of
+# "podman" or "docker", and the corresponding CLI must be installed and
+# running. Podman and Docker share compatible pull/run/rmi command syntax,
+# so this is a drop-in swap.
+engine = "podman"
+
 [exclusions]
 # Exact image references to always skip during inspection (e.g. images on
 # registries you don't have access to).

@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from aap_ee_inspector.app_config import AppConfig, OutputConfig, find_latest_file, load_config
 
 
@@ -18,6 +21,10 @@ class TestAppConfigDefaults:
         config = AppConfig()
         assert config.exclusions.images == []
         assert config.exclusions.name_patterns == []
+
+    def test_default_container_engine_is_podman(self):
+        config = AppConfig()
+        assert config.container.engine == "podman"
 
     def test_new_output_file_paths_include_timestamp(self):
         config = AppConfig()
@@ -94,3 +101,17 @@ class TestLoadConfig:
 
         config = load_config(path=toml_path)
         assert config.output.dir == Path("custom_outputs")
+
+    def test_loads_container_engine_from_toml(self, tmp_path):
+        toml_path = tmp_path / "config.toml"
+        toml_path.write_text('[container]\nengine = "docker"\n')
+
+        config = load_config(path=toml_path)
+        assert config.container.engine == "docker"
+
+    def test_invalid_container_engine_raises(self, tmp_path):
+        toml_path = tmp_path / "config.toml"
+        toml_path.write_text('[container]\nengine = "not-a-real-engine"\n')
+
+        with pytest.raises(ValidationError):
+            load_config(path=toml_path)

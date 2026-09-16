@@ -1,4 +1,4 @@
-"""Inspect AAP execution environment images locally with podman.
+"""Inspect AAP execution environment images locally with podman or docker.
 
 For each unique image referenced in the latest execution_environments.json
 (excluding any matched by config.toml's [exclusions] section, and further
@@ -11,7 +11,8 @@ disk space.
 Requires:
     - a <timestamp>_execution_environments.json to already exist in the
       output directory (run `aap-ee-fetch` first)
-    - podman installed and able to pull the referenced images
+    - the configured container engine (config.toml's [container].engine,
+      "podman" by default) installed and able to pull the referenced images
 
 Usage:
     aap-ee-inspect
@@ -94,24 +95,24 @@ def is_excluded(image: str, name: str, exclusions: ExclusionsConfig) -> bool:
     return image in exclusions.images or matches_any(name, exclusions.name_patterns)
 
 
-def pull_image(image: str) -> None:
-    """Pull `image` with podman; raises RuntimeError on failure."""
+def pull_image(image: str, engine: str) -> None:
+    """Pull `image` with the given container engine; raises RuntimeError on failure."""
     result = subprocess.run(
-        ["podman", "pull", image],
+        [engine, "pull", image],
         capture_output=True,
         text=True,
         check=False,
     )
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "podman pull failed")
+        raise RuntimeError(result.stderr.strip() or f"{engine} pull failed")
 
 
-def remove_image(image: str) -> None:
-    """Remove `image` from local podman storage. Best-effort; never raises."""
-    subprocess.run(["podman", "rmi", image], capture_output=True, text=True, check=False)
+def remove_image(image: str, engine: str) -> None:
+    """Remove `image` from local engine storage. Best-effort; never raises."""
+    subprocess.run([engine, "rmi", image], capture_output=True, text=True, check=False)
 
 
-def run_in_container(image: str) -> str:
+def run_in_container(image: str, engine: str) -> str:
     """Run the version/collection-listing commands inside a throwaway container.
 
     Returns combined stdout containing both the `ansible --version` output
@@ -123,13 +124,13 @@ def run_in_container(image: str) -> str:
         "ansible-galaxy collection list --format json"
     )
     result = subprocess.run(
-        ["podman", "run", "--rm", image, "sh", "-c", command],
+        [engine, "run", "--rm", image, "sh", "-c", command],
         capture_output=True,
         text=True,
         check=False,
     )
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "podman run failed")
+        raise RuntimeError(result.stderr.strip() or f"{engine} run failed")
     return result.stdout
 
 
@@ -169,9 +170,11 @@ def parse_collections_block(text: str) -> dict[str, str]:
     return collections
 
 
-def inspect_image(image: str) -> tuple[str | None, str | None, str | None, dict[str, str]]:
+def inspect_image(
+    image: str, engine: str
+) -> tuple[str | None, str | None, str | None, dict[str, str]]:
     """Pull-independent inspection step: run version/collection commands and parse them."""
-    output = run_in_container(image)
+    output = run_in_container(image, engine)
     ansible_block, _, collections_block = output.partition(ANSIBLE_VERSION_SEPARATOR)
 
     core_version, python_version, jinja_version = parse_ansible_version_block(ansible_block)
@@ -181,7 +184,7 @@ def inspect_image(image: str) -> tuple[str | None, str | None, str | None, dict[
 
 
 def inspect_all_images(
-    images_to_names: dict[str, list[str]],
+    images_to_names: dict[str, list[str]], engine: str
 ) -> list[ExecutionEnvironmentDetails]:
     """Pull, inspect, and clean up each image, collecting results as we go.
 
@@ -195,8 +198,8 @@ def inspect_all_images(
         print(f"[{i}/{total}] {image}")
 
         try:
-            print("  pulling...")
-            pull_image(image)
+            print(f"  pulling ({engine})...")
+            pull_image(image, engine)
         except RuntimeError as exc:
             print(f"  FAILED to pull: {exc}")
             details.append(
@@ -206,7 +209,7 @@ def inspect_all_images(
 
         try:
             print("  inspecting...")
-            core_version, python_version, jinja_version, collections = inspect_image(image)
+            core_version, python_version, jinja_version, collections = inspect_image(image, engine)
             details.append(
                 ExecutionEnvironmentDetails(
                     names=names,
@@ -230,7 +233,7 @@ def inspect_all_images(
             )
         finally:
             print("  removing local image...")
-            remove_image(image)
+            remove_image(image, engine)
 
     return details
 
@@ -281,7 +284,8 @@ def main() -> None:
 
     images_to_names = load_images(input_file, config, only=only)
     print(f"Found {len(images_to_names)} unique images across the execution environment list.")
-    details = inspect_all_images(images_to_names)
+    print(f"Using container engine: {config.container.engine}")
+    details = inspect_all_images(images_to_names, config.container.engine)
     save_details(details, config)
 
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import tomllib
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -38,6 +39,12 @@ class OutputConfig(BaseModel):
     fields: list[str] | None = None
 
 
+class ContainerConfig(BaseModel):
+    """Settings for the container engine used to pull/run/remove EE images."""
+
+    engine: Literal["podman", "docker"] = "podman"
+
+
 class ExclusionsConfig(BaseModel):
     """Images/EEs to skip during the inspect stage.
 
@@ -57,6 +64,7 @@ class AppConfig(BaseModel):
 
     api: ApiConfig = Field(default_factory=ApiConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
+    container: ContainerConfig = Field(default_factory=ContainerConfig)
     exclusions: ExclusionsConfig = Field(default_factory=ExclusionsConfig)
 
     def new_output_file(self, timestamp: str) -> Path:
