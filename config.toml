@@ -1,0 +1,27 @@
+# Configuration for aap-ee-inspector.
+# Secrets (AAP_API_TOKEN, AAP_BASE_URL) stay in .env; this file is for
+# non-secret settings that are safe to commit and tweak per environment.
+
+[api]
+execution_environments_path = "/api/controller/v2/execution_environments/"
+
+[output]
+dir = "outputs"
+# Fields to keep in execution_environments.json. Comment out / remove to
+# keep every field returned by the AAP API.
+fields = ["name", "image", "description"]
+
+[exclusions]
+# Exact image references to always skip during inspection (e.g. images on
+# registries you don't have access to).
+images = []
+
+# Glob patterns (fnmatch syntax) matched against EE names. An image is
+# skipped if any of its associated EE names match any pattern here.
+# Example: skip every tag of the "rhel6_env" family and AAP's built-in EEs.
+name_patterns = [
+    "rhel6_env:*",
+    "Default execution environment",
+    "Control Plane Execution Environment",
+    "Minimal execution environment",
+]
