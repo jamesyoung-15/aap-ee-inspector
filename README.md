@@ -1,4 +1,4 @@
-# Amfam AAP EE Info Grabber
+# AAP EE Inspector
 
 Fetches every execution environment (EE) available in Ansible Automation
 Platform (AAP), then pulls each EE image locally with podman to inspect
