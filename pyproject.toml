@@ -1,0 +1,39 @@
+[project]
+name = "aap-ee-inspector"
+version = "0.1.0"
+description = "Fetches, inspects, and generates reports on AAP execution environments."
+readme = "README.md"
+authors = [
+    { name = "James Young", email = "james.young@amfam.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "go-task-bin>=3.53.1",
+    "httpx>=0.28.1",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+]
+
+[project.scripts]
+aap-ee-fetch = "aap_ee_inspector.main:main"
+aap-ee-inspect = "aap_ee_inspector.inspect_execution_environments:main"
+aap-ee-report = "aap_ee_inspector.generate_report:main"
+
+[build-system]
+requires = ["uv_build>=0.12.15,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "go-task-bin>=3.53.1",
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "ruff>=0.16.8",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "PERF", "PLW"]
