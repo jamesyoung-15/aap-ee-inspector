@@ -54,8 +54,11 @@ class ContainerConfig(BaseModel):
 class ExclusionsConfig(BaseModel):
     """Images/EEs to skip during the inspect stage.
 
-    images: exact image references to always skip (e.g. pinned digests that
-        require registry auth we don't have).
+    images: glob patterns (fnmatch syntax) matched against the full image
+        reference; an image is skipped if it matches any pattern here (e.g.
+        "*/amfam_default:1.*" or an exact full reference). Exact strings
+        with no glob characters work too, since fnmatch falls back to a
+        literal match when there's nothing to expand.
     name_patterns: glob patterns (fnmatch syntax) matched against EE names;
         an image is skipped if any of its associated EE names match any
         pattern (e.g. "rhel6_env:*" to skip every tag of that EE family).
@@ -75,8 +78,10 @@ class CacheConfig(BaseModel):
     EE version tags reduce the actual total).
 
     keep_all: if true, never remove any image after inspection.
-    images: exact image references to always keep cached, regardless of
-        keep_all.
+    images: glob patterns (fnmatch syntax) matched against the full image
+        reference; an image is kept cached if it matches any pattern here,
+        regardless of keep_all. Exact strings with no glob characters work
+        too (e.g. "*/amfam_default:1.*" or a full literal reference).
     name_patterns: glob patterns (fnmatch syntax) matched against EE names;
         an image is kept cached if any of its associated EE names match any
         pattern here.
@@ -90,7 +95,7 @@ class CacheConfig(BaseModel):
         """Return True if `image` should be kept cached rather than removed."""
         if self.keep_all:
             return True
-        if image in self.images:
+        if matches_any(image, self.images):
             return True
         return any(matches_any(name, self.name_patterns) for name in names)
 

@@ -78,6 +78,16 @@ class TestCacheConfigShouldKeep:
         cache = CacheConfig(images=["registry.example.com/foo:1.0"])
         assert cache.should_keep("registry.example.com/foo:1.0", ["some-name"])
 
+    def test_image_glob_pattern_is_kept(self):
+        cache = CacheConfig(images=["*/amfam_default:1.*"])
+        assert cache.should_keep(
+            "registry.example.com/path/amfam_default:1.21", ["amfam_default:1.21"]
+        )
+
+    def test_image_glob_pattern_no_match_is_not_kept(self):
+        cache = CacheConfig(images=["*/amfam_default:1.*"])
+        assert not cache.should_keep("registry.example.com/path/vmware_env:1.0", ["vmware_env:1.0"])
+
     def test_name_pattern_match_is_kept(self):
         cache = CacheConfig(name_patterns=["amfam_default:*"])
         assert cache.should_keep("some-image", ["amfam_default:1.21"])

@@ -92,11 +92,14 @@ don't support `collection list`). Rather than let these show up as noisy
 
 ```toml
 [exclusions]
-images = ["registry.example.com/some/pinned@sha256:..."]
+images = ["*/pinned-image:1.0", "registry.example.com/some/pinned@sha256:..."]
 name_patterns = ["rhel6_env:*", "Minimal execution environment"]
 ```
 
-- `images` — exact image reference matches.
+- `images` — glob patterns (`fnmatch` syntax) matched against the full
+  image reference; an image is skipped if it matches *any* pattern here.
+  Plain strings with no glob characters (`*`, `?`, `[...]`) work too and
+  match only that exact image.
 - `name_patterns` — glob patterns (`fnmatch` syntax) matched against EE
   names; an image is skipped if *any* of its associated EE names match
   *any* pattern.
@@ -114,14 +117,16 @@ present:
 
 ```toml
 [cache]
-keep_all = false          # true = never remove any image
-images = []                # exact image refs to always keep
-name_patterns = []         # glob patterns matched against EE names
+keep_all = false               # true = never remove any image
+images = []                    # glob patterns (or exact refs) to always keep
+name_patterns = ["amfam_default:*"]  # glob patterns matched against EE names
 ```
 
 - `keep_all = true` keeps every image, unconditionally.
-- `images`/`name_patterns` use the same exact-match / `fnmatch`-glob
-  semantics as `[exclusions]`, but for retention instead of skipping.
+- `images`/`name_patterns` use the exact same `fnmatch`-glob semantics as
+  `[exclusions]` (see above), but for retention instead of skipping — e.g.
+  `images = ["*/amfam_default:*"]` keeps every version of that EE family
+  cached without spelling out the full registry path for each tag.
 - Per-run override without editing `config.toml`: `aap-ee-inspect --keep-cache`
   (forces `keep_all` behavior for that invocation only).
 

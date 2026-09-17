@@ -115,6 +115,14 @@ class TestIsExcluded:
         exclusions = ExclusionsConfig(images=["registry.example.com/foo:1.0"])
         assert is_excluded("registry.example.com/foo:1.0", "any-name", exclusions)
 
+    def test_excluded_by_image_glob_pattern(self):
+        exclusions = ExclusionsConfig(images=["*/rhel6_env:*"])
+        assert is_excluded("registry.example.com/path/rhel6_env:1.0", "any-name", exclusions)
+
+    def test_not_excluded_when_image_glob_does_not_match(self):
+        exclusions = ExclusionsConfig(images=["*/rhel6_env:*"])
+        assert not is_excluded("registry.example.com/path/vmware_env:1.0", "any-name", exclusions)
+
     def test_excluded_by_name_pattern(self):
         exclusions = ExclusionsConfig(name_patterns=["rhel6_env:*"])
         assert is_excluded("some-image", "rhel6_env:1.0", exclusions)

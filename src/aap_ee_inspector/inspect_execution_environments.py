@@ -76,10 +76,10 @@ def load_images(
 ) -> dict[str, list[str]]:
     """Load `input_file` and group EE names by image.
 
-    Images excluded via config.toml's [exclusions] section (either by exact
-    image reference or by a matching EE name glob pattern) are always
-    skipped. If `only` is given, results are further narrowed to just the EE
-    names matching one of those glob patterns.
+    Images excluded via config.toml's [exclusions] section (either by a
+    matching image glob pattern or a matching EE name glob pattern) are
+    always skipped. If `only` is given, results are further narrowed to just
+    the EE names matching one of those glob patterns.
     """
     records = json.loads(input_file.read_text())
 
@@ -102,7 +102,7 @@ def load_images(
 
 def is_excluded(image: str, name: str, exclusions: ExclusionsConfig) -> bool:
     """Return True if `image`/`name` should be skipped per config exclusions."""
-    return image in exclusions.images or matches_any(name, exclusions.name_patterns)
+    return matches_any(image, exclusions.images) or matches_any(name, exclusions.name_patterns)
 
 
 def pull_image(image: str, engine: str) -> None:

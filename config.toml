@@ -24,9 +24,12 @@ include_pip_packages = false
 engine = "podman"
 
 [exclusions]
-# Exact image references to always skip during inspection (e.g. images on
-# registries you don't have access to).
+# Glob patterns (fnmatch syntax) matched against the full image reference.
+# An image is skipped if it matches any pattern here. Plain strings with no
+# glob characters (*, ?, [...]) work too, matching only that exact image.
+# Example: skip a specific image, or a whole family with a wildcard.
 images = []
+# images = ["*/amfam_default:1.0", "registry.example.com/some/pinned@sha256:..."]
 
 # Glob patterns (fnmatch syntax) matched against EE names. An image is
 # skipped if any of its associated EE names match any pattern here.
@@ -47,8 +50,13 @@ name_patterns = [
 # toggled per-run with `aap-ee-inspect --keep-cache`.
 keep_all = false
 
-# Exact image references to always keep cached, regardless of keep_all.
+# Glob patterns (fnmatch syntax) matched against the full image reference.
+# An image is kept cached if it matches any pattern here, regardless of
+# keep_all. Plain strings with no glob characters work too, matching only
+# that exact image.
+# Example: keep every version of the "amfam_default" EE family cached.
 images = []
+# images = ["*/amfam_default:*"]
 
 # Glob patterns (fnmatch syntax) matched against EE names. An image is kept
 # cached if any of its associated EE names match any pattern here.
