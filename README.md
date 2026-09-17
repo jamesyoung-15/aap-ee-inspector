@@ -6,20 +6,23 @@ inspect what's actually installed inside it: `ansible-core` version, Python
 version, `jinja` version, every Ansible collection (with version) baked
 into the image, and optionally every pip-installed Python package.
 
-Output is written to `outputs/`, timestamped so each run gets its own file
-rather than overwriting the last:
+Output is written to `outputs/<timestamp>/`, one directory per run, so all
+files from a single end-to-end run live together instead of scattering
+across separately-timestamped files:
 
-- `<timestamp>_execution_environments.json` — raw list of EEs from the AAP
-  API (name, image, description).
-- `<timestamp>_execution_environment_details.json` — per-image inspection
-  results.
-- `<timestamp>_execution_environment_report.md` — human-readable Markdown
-  summary of the above, one section per image.
+- `outputs/<timestamp>/execution_environments.json` — raw list of EEs from
+  the AAP API (name, image, description).
+- `outputs/<timestamp>/execution_environment_details.json` — per-image
+  inspection results.
+- `outputs/<timestamp>/execution_environment_report.md` — human-readable
+  Markdown summary of the above, one section per image.
 
 `aap-ee-inspect` and `aap-ee-report` automatically use the most recently
-generated input file by default; pass `--input PATH` to target a specific
-historical run instead. See [docs/README.md](docs/README.md) for a
-breakdown of how the pipeline works internally.
+generated run directory by default (writing their own output into that
+same directory); pass `--input PATH` (a run directory or a file inside one)
+to target a specific historical run instead. See
+[docs/README.md](docs/README.md) for a breakdown of how the pipeline works
+internally.
 
 ## Requirements
 
@@ -61,9 +64,9 @@ uv run task all
 Or run each stage individually:
 
 ```bash
-uv run task fetch     # -> outputs/<timestamp>_execution_environments.json
-uv run task inspect   # -> outputs/<timestamp>_execution_environment_details.json (slow: pulls every unique image)
-uv run task report    # -> outputs/<timestamp>_execution_environment_report.md
+uv run task fetch     # -> outputs/<timestamp>/execution_environments.json
+uv run task inspect   # -> outputs/<timestamp>/execution_environment_details.json (slow: pulls every unique image)
+uv run task report    # -> outputs/<timestamp>/execution_environment_report.md
 ```
 
 Equivalent direct commands (without `task`):
@@ -88,11 +91,11 @@ uv run task report -- --only "amfam_default:1.21,vmware_env:*"
 ```
 
 To re-run a stage against a specific past run's output instead of the
-latest, pass `--input`:
+latest, pass `--input` with the run directory (or a file inside it):
 
 ```bash
-uv run aap-ee-inspect --input outputs/20260101T120000_execution_environments.json
-uv run aap-ee-report --input outputs/20260101T120000_execution_environment_details.json
+uv run aap-ee-inspect --input outputs/20260101T120000
+uv run aap-ee-report --input outputs/20260101T120000
 ```
 
 To also capture every pip-installed Python package per EE image (off by

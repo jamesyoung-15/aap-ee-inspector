@@ -153,10 +153,10 @@ class TestResolveInputFile:
         with pytest.raises(FileNotFoundError):
             resolve_input_file(config, explicit_path=str(tmp_path / "nope.json"))
 
-    def test_explicit_path_takes_precedence_over_latest(self, tmp_path):
+    def test_explicit_file_path_takes_precedence_over_latest(self, tmp_path):
         output_dir = tmp_path / "outputs"
-        output_dir.mkdir()
-        (output_dir / "20260101T000000_execution_environment_details.json").write_text("[]")
+        (output_dir / "20260101T000000").mkdir(parents=True)
+        (output_dir / "20260101T000000" / "execution_environment_details.json").write_text("[]")
         explicit = tmp_path / "custom.json"
         explicit.write_text("[]")
 
@@ -164,12 +164,23 @@ class TestResolveInputFile:
         result = resolve_input_file(config, explicit_path=str(explicit))
         assert result == explicit
 
+    def test_explicit_run_dir_path_resolves_to_file_inside_it(self, tmp_path):
+        output_dir = tmp_path / "outputs"
+        run_dir = output_dir / "20260101T000000"
+        run_dir.mkdir(parents=True)
+        (run_dir / "execution_environment_details.json").write_text("[]")
+
+        config = AppConfig(output=OutputConfig(dir=output_dir))
+        result = resolve_input_file(config, explicit_path=str(run_dir))
+        assert result == run_dir / "execution_environment_details.json"
+
     def test_picks_latest_when_no_explicit_path(self, tmp_path):
         output_dir = tmp_path / "outputs"
-        output_dir.mkdir()
-        (output_dir / "20260101T000000_execution_environment_details.json").write_text("[]")
-        (output_dir / "20260601T000000_execution_environment_details.json").write_text("[]")
+        (output_dir / "20260101T000000").mkdir(parents=True)
+        (output_dir / "20260101T000000" / "execution_environment_details.json").write_text("[]")
+        (output_dir / "20260601T000000").mkdir(parents=True)
+        (output_dir / "20260601T000000" / "execution_environment_details.json").write_text("[]")
 
         config = AppConfig(output=OutputConfig(dir=output_dir))
         result = resolve_input_file(config, explicit_path=None)
-        assert result.name == "20260601T000000_execution_environment_details.json"
+        assert result.parent.name == "20260601T000000"

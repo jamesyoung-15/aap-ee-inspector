@@ -6,10 +6,13 @@ developers have a quick reference without needing to pull the images
 themselves. If pip package data was collected (see aap-ee-inspect
 --pip-list), it is rendered in a second code block per image.
 
+The report is written to execution_environment_report.md in the same run
+directory (outputs/<timestamp>/) the input file was read from.
+
 Usage:
     aap-ee-report
     aap-ee-report --only "amfam_default:1.21,vmware_env:*"
-    aap-ee-report --input outputs/20260101T120000_execution_environment_details.json
+    aap-ee-report --input outputs/20260101T120000
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ import argparse
 import json
 from pathlib import Path
 
-from aap_ee_inspector.app_config import AppConfig, current_timestamp, load_config
+from aap_ee_inspector.app_config import DETAILS_FILENAME, REPORT_FILENAME, AppConfig, load_config
 from aap_ee_inspector.filters import matches_any, parse_csv_patterns
 from aap_ee_inspector.models import ExecutionEnvironmentDetails
 
@@ -26,11 +29,15 @@ from aap_ee_inspector.models import ExecutionEnvironmentDetails
 def resolve_input_file(config: AppConfig, explicit_path: str | None) -> Path:
     """Resolve which execution_environment_details.json to read.
 
-    Uses `explicit_path` if given, otherwise the most recently generated
-    timestamped file in the output directory.
+    `explicit_path` may point at a run directory (outputs/<timestamp>/) or
+    directly at an execution_environment_details.json file inside one. If
+    not given, defaults to the file in the most recently generated run
+    directory that has one.
     """
     if explicit_path is not None:
         path = Path(explicit_path)
+        if path.is_dir():
+            path = path / DETAILS_FILENAME
         if not path.exists():
             raise FileNotFoundError(f"{path} not found.")
         return path
@@ -38,7 +45,7 @@ def resolve_input_file(config: AppConfig, explicit_path: str | None) -> Path:
     latest = config.latest_details_output_file()
     if latest is None:
         raise FileNotFoundError(
-            f"No execution_environment_details.json found in {config.output.dir}. "
+            f"No execution_environment_details.json found under {config.output.dir}. "
             "Run `aap-ee-inspect` first."
         )
     return latest
@@ -132,10 +139,10 @@ def render_report(all_details: list[ExecutionEnvironmentDetails]) -> str:
     return "\n".join(sections)
 
 
-def save_report(markdown: str, config: AppConfig) -> Path:
-    """Write the rendered Markdown to a new timestamped file. Returns the path written to."""
-    config.output.dir.mkdir(parents=True, exist_ok=True)
-    report_file = config.new_report_output_file(current_timestamp())
+def save_report(markdown: str, run_dir: Path) -> Path:
+    """Write the rendered Markdown into `run_dir`. Returns the path written to."""
+    run_dir.mkdir(parents=True, exist_ok=True)
+    report_file = run_dir / REPORT_FILENAME
     report_file.write_text(markdown)
     print(f"Saved report to {report_file}")
     return report_file
@@ -156,8 +163,9 @@ def parse_args() -> argparse.Namespace:
         "--input",
         metavar="PATH",
         help=(
-            "Path to a specific execution_environment_details.json to read. "
-            "Defaults to the most recently generated file in the output directory."
+            "Path to a specific run directory (outputs/<timestamp>/) or "
+            "execution_environment_details.json file to read. Defaults to "
+            "the most recently generated run that has one."
         ),
     )
     return parser.parse_args()
@@ -170,11 +178,12 @@ def main() -> None:
 
     config = load_config()
     input_file = resolve_input_file(config, args.input)
+    run_dir = input_file.parent
     print(f"Reading execution environment details from {input_file}")
 
     all_details = load_details(input_file, only=only)
     markdown = render_report(all_details)
-    save_report(markdown, config)
+    save_report(markdown, run_dir)
 
 
 if __name__ == "__main__":

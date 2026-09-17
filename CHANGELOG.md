@@ -28,10 +28,12 @@ optionally pip packages.
 - **Markdown report generation**: one section per EE image with
   ansible-core/Python/jinja versions and the full collection list in a
   fenced code block (one collection per line, sorted).
-- **Timestamped outputs**: every run writes a new
-  `outputs/<timestamp>_<filename>` file rather than overwriting the last;
-  `aap-ee-inspect`/`aap-ee-report` auto-select the most recent matching
-  input file by default, or `--input PATH` to target a specific past run.
+- **Per-run output directories**: every `aap-ee-fetch` run creates a new
+  `outputs/<timestamp>/` directory; `aap-ee-inspect` and `aap-ee-report`
+  write their output into that same directory, so all files belonging to
+  one end-to-end run live together. Auto-selects the most recently
+  generated run by default, or `--input PATH` (run directory or a file
+  inside one) to target a specific past run.
 - **Config-driven exclusions**: `[exclusions]` in `config.toml` skips known
   unreachable/unsupported images (glob patterns for both image references
   and EE names).

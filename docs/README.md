@@ -1,33 +1,44 @@
 # Architecture
 
-This tool is a 3-stage pipeline. Each stage reads the previous stage's most
-recently generated output from `outputs/` and can be re-run independently.
+This tool is a 3-stage pipeline. Each stage writes into (and, for stages 2
+and 3, reads from) a shared **run directory**, so all output from a single
+end-to-end run lives together in one place.
 
 ```
 main.py                          inspect_execution_environments.py       generate_report.py
   (AAP API)                        (podman/docker pull/run per image)      (JSON -> Markdown)
      |                                      |                                      |
      v                                      v                                      v
-<ts>_execution_environments.json -> <ts>_execution_environment_details.json -> <ts>_execution_environment_report.md
+outputs/<timestamp>/execution_environments.json
+                     execution_environment_details.json   <- written into the same dir
+                     execution_environment_report.md       <- written into the same dir
 ```
 
-## Timestamped outputs
+## Run directories
 
-Every run writes a **new** file rather than overwriting the previous one:
-`outputs/<YYYYMMDDTHHMMSS>_<filename>`, e.g.
-`outputs/20260916T171548_execution_environments.json`. This keeps a history
-of past runs for comparison and avoids accidentally clobbering data from a
-long-running `aap-ee-inspect` pass.
+Every `aap-ee-fetch` run creates a new directory:
+`outputs/<YYYYMMDDTHHMMSS>/`, e.g. `outputs/20260917T141049/`. All output
+from that run — the fetched EE list, inspection details, and the generated
+report — lands in that same directory, so it's immediately obvious which
+files belong to which run (no more guessing which timestamp-prefixed file
+goes with which). This also keeps a history of past runs for comparison
+without overwriting anything.
 
 `aap-ee-inspect` and `aap-ee-report` each need an input file from the
-previous stage. By default they auto-select the **most recently generated**
-matching file in the output directory (filenames sort chronologically, so
-this is just picking the lexicographically largest match). To target a
-specific historical run instead, pass `--input`:
+previous stage, and write their own output into the **same run directory**
+the input came from. By default they auto-select the file from the **most
+recently generated** run directory that has one (falling back to an older
+run if the newest one hasn't gotten that far yet — e.g. a run that's only
+done `fetch` so far). To target a specific historical run instead, pass
+`--input` with either the run directory or a direct path to the file inside
+it:
 
 ```
-aap-ee-inspect --input outputs/20260101T120000_execution_environments.json
-aap-ee-report --input outputs/20260101T120000_execution_environment_details.json
+aap-ee-inspect --input outputs/20260101T120000
+aap-ee-report --input outputs/20260101T120000
+# or, equivalently, pointing directly at the file:
+aap-ee-inspect --input outputs/20260101T120000/execution_environments.json
+aap-ee-report --input outputs/20260101T120000/execution_environment_details.json
 ```
 
 ## Stage 1: `main.py` (entry point: `aap-ee-fetch`)
@@ -40,9 +51,9 @@ the `next` link until exhausted.
 - TLS verification is disabled (`verify=False`) since the AAP host uses an
   internal/self-signed certificate not present in the default trust store.
 - Output fields are trimmed to `config.toml`'s `[output].fields` (currently
-  `name`, `image`, `description`) before writing to a new timestamped
-  `execution_environments.json`. Remove/comment out `fields` in
-  `config.toml` to dump full records instead.
+  `name`, `image`, `description`) before writing to a new
+  `outputs/<timestamp>/execution_environments.json`. Remove/comment out
+  `fields` in `config.toml` to dump full records instead.
 
 ## Stage 2: `inspect_execution_environments.py` (entry point: `aap-ee-inspect`)
 
@@ -194,7 +205,7 @@ run.
 ## Stage 3: `generate_report.py` (entry point: `aap-ee-report`)
 
 Renders the latest (or `--input`-specified) execution environment details
-file into a single timestamped Markdown file for quick human reference —
+file into `execution_environment_report.md` in that same run directory —
 one `##` section per unique image, with collections listed in a fenced code
 block (one per line, sorted alphabetically). If pip package data was
 collected, it's rendered in a second code block per image. Successful

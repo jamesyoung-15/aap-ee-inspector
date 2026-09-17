@@ -1,5 +1,6 @@
 """Fetch all AAP execution environments (paginating through results) and
-dump them to outputs/execution_environments.json for downstream analysis.
+dump them to a new outputs/<timestamp>/execution_environments.json run
+directory for downstream analysis.
 
 Usage:
     python main.py
@@ -13,7 +14,12 @@ from urllib.parse import urljoin
 
 import httpx
 
-from aap_ee_inspector.app_config import AppConfig, current_timestamp, load_config
+from aap_ee_inspector.app_config import (
+    EXECUTION_ENVIRONMENTS_FILENAME,
+    AppConfig,
+    current_timestamp,
+    load_config,
+)
 from aap_ee_inspector.config import Settings
 from aap_ee_inspector.models import (
     ExecutionEnvironment,
@@ -52,12 +58,13 @@ def fetch_all_execution_environments(
 
 
 def save_results(results: list[ExecutionEnvironment], config: AppConfig) -> Path:
-    """Write results to a new timestamped file, limited to config.output_fields.
+    """Write results to a new run directory, limited to config.output_fields.
 
     Returns the path written to.
     """
-    config.output.dir.mkdir(parents=True, exist_ok=True)
-    output_file = config.new_output_file(current_timestamp())
+    run_dir = config.new_run_dir(current_timestamp())
+    run_dir.mkdir(parents=True, exist_ok=True)
+    output_file = run_dir / EXECUTION_ENVIRONMENTS_FILENAME
     payload = [ee.model_dump(mode="json", include=config.output_fields) for ee in results]
     output_file.write_text(json.dumps(payload, indent=2))
     print(f"Saved {len(results)} execution environments to {output_file}")

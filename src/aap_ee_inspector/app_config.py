@@ -19,12 +19,14 @@ from aap_ee_inspector.filters import matches_any
 
 DEFAULT_CONFIG_PATH = Path("config.toml")
 
-# Filename timestamp format: sorts lexicographically in chronological order.
+# Run directory timestamp format: sorts lexicographically in chronological
+# order, so the max() of directory names is always the latest run.
 TIMESTAMP_FORMAT = "%Y%m%dT%H%M%S"
 
-EXECUTION_ENVIRONMENTS_SUFFIX = "execution_environments.json"
-DETAILS_SUFFIX = "execution_environment_details.json"
-REPORT_SUFFIX = "execution_environment_report.md"
+# Plain filenames used within each run directory (outputs/<timestamp>/).
+EXECUTION_ENVIRONMENTS_FILENAME = "execution_environments.json"
+DETAILS_FILENAME = "execution_environment_details.json"
+REPORT_FILENAME = "execution_environment_report.md"
 
 
 class ApiConfig(BaseModel):
@@ -109,25 +111,21 @@ class AppConfig(BaseModel):
     exclusions: ExclusionsConfig = Field(default_factory=ExclusionsConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
 
-    def new_output_file(self, timestamp: str) -> Path:
-        """Path for a new, timestamped execution_environments.json."""
-        return self.output.dir / f"{timestamp}_{EXECUTION_ENVIRONMENTS_SUFFIX}"
+    def new_run_dir(self, timestamp: str) -> Path:
+        """Path to a new run directory: outputs/<timestamp>/."""
+        return self.output.dir / timestamp
 
-    def new_details_output_file(self, timestamp: str) -> Path:
-        """Path for a new, timestamped execution_environment_details.json."""
-        return self.output.dir / f"{timestamp}_{DETAILS_SUFFIX}"
-
-    def new_report_output_file(self, timestamp: str) -> Path:
-        """Path for a new, timestamped execution_environment_report.md."""
-        return self.output.dir / f"{timestamp}_{REPORT_SUFFIX}"
+    def latest_run_dir(self) -> Path | None:
+        """Most recent existing run directory, or None if none exist."""
+        return find_latest_run_dir(self.output.dir)
 
     def latest_output_file(self) -> Path | None:
-        """Most recent existing execution_environments.json, or None if none exist."""
-        return find_latest_file(self.output.dir, EXECUTION_ENVIRONMENTS_SUFFIX)
+        """execution_environments.json in the most recent run directory, if any."""
+        return find_latest_file_in_run(self.output.dir, EXECUTION_ENVIRONMENTS_FILENAME)
 
     def latest_details_output_file(self) -> Path | None:
-        """Most recent existing execution_environment_details.json, or None if none exist."""
-        return find_latest_file(self.output.dir, DETAILS_SUFFIX)
+        """execution_environment_details.json in the most recent run directory, if any."""
+        return find_latest_file_in_run(self.output.dir, DETAILS_FILENAME)
 
     @property
     def output_fields(self) -> set[str] | None:
@@ -140,18 +138,46 @@ def current_timestamp() -> str:
     return datetime.now().strftime(TIMESTAMP_FORMAT)
 
 
-def find_latest_file(directory: Path, suffix: str) -> Path | None:
-    """Find the most recently generated `<timestamp>_<suffix>` file in `directory`.
+def is_run_dir_name(name: str) -> bool:
+    """Return True if `name` looks like a run directory timestamp we generated."""
+    try:
+        datetime.strptime(name, TIMESTAMP_FORMAT)
+    except ValueError:
+        return False
+    return True
 
-    Filenames sort lexicographically in chronological order (the timestamp
-    format has no ambiguity), so the max() of matching names is the latest.
-    Returns None if the directory doesn't exist or has no matching files.
+
+def list_run_dirs(output_dir: Path) -> list[Path]:
+    """List run directories under `output_dir`, sorted oldest to newest.
+
+    Non-run-directory entries (anything not matching TIMESTAMP_FORMAT) are
+    ignored, so stray files or manually-created directories don't interfere.
     """
-    if not directory.exists():
-        return None
+    if not output_dir.exists():
+        return []
 
-    matches = sorted(directory.glob(f"*_{suffix}"))
-    return matches[-1] if matches else None
+    return sorted(p for p in output_dir.iterdir() if p.is_dir() and is_run_dir_name(p.name))
+
+
+def find_latest_run_dir(output_dir: Path) -> Path | None:
+    """Find the most recently generated run directory under `output_dir`."""
+    run_dirs = list_run_dirs(output_dir)
+    return run_dirs[-1] if run_dirs else None
+
+
+def find_latest_file_in_run(output_dir: Path, filename: str) -> Path | None:
+    """Find `filename` inside the most recent run directory that contains it.
+
+    Searches run directories from newest to oldest and returns the first
+    match, so a run that only did `fetch` (no `inspect` yet) is skipped when
+    looking for a details file, falling back to an older run that has one.
+    """
+    for run_dir in reversed(list_run_dirs(output_dir)):
+        candidate = run_dir / filename
+        if candidate.exists():
+            return candidate
+
+    return None
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:

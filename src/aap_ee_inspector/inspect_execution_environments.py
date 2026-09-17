@@ -1,6 +1,6 @@
 """Inspect AAP execution environment images locally with podman or docker.
 
-For each unique image referenced in the latest execution_environments.json
+For each unique image referenced in the latest run's execution_environments.json
 (excluding any matched by config.toml's [exclusions] section, and further
 narrowed by --only if given), pulls the image, runs `ansible --version` and
 `ansible-galaxy collection list --format json` (and, if enabled, `pip list
@@ -9,16 +9,19 @@ ansible-core/python/jinja versions and the installed collection (and
 optionally pip package) versions, then removes the image again to reclaim
 disk space (unless kept per config.toml's [cache] section or --keep-cache).
 
+Results are written to execution_environment_details.json in the same run
+directory (outputs/<timestamp>/) the input file was read from.
+
 Requires:
-    - a <timestamp>_execution_environments.json to already exist in the
-      output directory (run `aap-ee-fetch` first)
+    - an outputs/<timestamp>/execution_environments.json run directory to
+      already exist (run `aap-ee-fetch` first)
     - the configured container engine (config.toml's [container].engine,
       "podman" by default) installed and able to pull the referenced images
 
 Usage:
     aap-ee-inspect
     aap-ee-inspect --only "amfam_default:1.21,vmware_env:*"
-    aap-ee-inspect --input outputs/20260101T120000_execution_environments.json
+    aap-ee-inspect --input outputs/20260101T120000
     aap-ee-inspect --pip-list
     aap-ee-inspect --keep-cache
 """
@@ -33,10 +36,11 @@ from collections import defaultdict
 from pathlib import Path
 
 from aap_ee_inspector.app_config import (
+    DETAILS_FILENAME,
+    EXECUTION_ENVIRONMENTS_FILENAME,
     AppConfig,
     CacheConfig,
     ExclusionsConfig,
-    current_timestamp,
     load_config,
 )
 from aap_ee_inspector.filters import matches_any, parse_csv_patterns
@@ -53,11 +57,15 @@ JINJA_VERSION_RE = re.compile(r"jinja version = ([\d.]+)")
 def resolve_input_file(config: AppConfig, explicit_path: str | None) -> Path:
     """Resolve which execution_environments.json to read.
 
-    Uses `explicit_path` if given, otherwise the most recently generated
-    timestamped file in the output directory.
+    `explicit_path` may point at a run directory (outputs/<timestamp>/) or
+    directly at an execution_environments.json file inside one. If not
+    given, defaults to the file in the most recently generated run
+    directory.
     """
     if explicit_path is not None:
         path = Path(explicit_path)
+        if path.is_dir():
+            path = path / EXECUTION_ENVIRONMENTS_FILENAME
         if not path.exists():
             raise FileNotFoundError(f"{path} not found.")
         return path
@@ -65,7 +73,7 @@ def resolve_input_file(config: AppConfig, explicit_path: str | None) -> Path:
     latest = config.latest_output_file()
     if latest is None:
         raise FileNotFoundError(
-            f"No execution_environments.json found in {config.output.dir}. "
+            f"No execution_environments.json found under {config.output.dir}. "
             "Run `aap-ee-fetch` first to fetch the execution environment list from AAP."
         )
     return latest
@@ -287,13 +295,13 @@ def inspect_all_images(
     return details
 
 
-def save_details(details: list[ExecutionEnvironmentDetails], config: AppConfig) -> Path:
-    """Write the details list to a new timestamped file as pretty-printed JSON.
+def save_details(details: list[ExecutionEnvironmentDetails], run_dir: Path) -> Path:
+    """Write the details list into `run_dir` as pretty-printed JSON.
 
     Returns the path written to.
     """
-    config.output.dir.mkdir(parents=True, exist_ok=True)
-    details_file = config.new_details_output_file(current_timestamp())
+    run_dir.mkdir(parents=True, exist_ok=True)
+    details_file = run_dir / DETAILS_FILENAME
     payload = [d.model_dump(mode="json") for d in details]
     details_file.write_text(json.dumps(payload, indent=2))
     print(f"Saved {len(details)} execution environment details to {details_file}")
@@ -315,8 +323,9 @@ def parse_args() -> argparse.Namespace:
         "--input",
         metavar="PATH",
         help=(
-            "Path to a specific execution_environments.json to read. "
-            "Defaults to the most recently generated file in the output directory."
+            "Path to a specific run directory (outputs/<timestamp>/) or "
+            "execution_environments.json file to read. Defaults to the "
+            "most recently generated run."
         ),
     )
     parser.add_argument(
@@ -358,6 +367,7 @@ def main() -> None:
         )
 
     input_file = resolve_input_file(config, args.input)
+    run_dir = input_file.parent
     print(f"Reading execution environments from {input_file}")
 
     images_to_names = load_images(input_file, config, only=only)
@@ -372,7 +382,7 @@ def main() -> None:
     details = inspect_all_images(
         images_to_names, config.container.engine, include_pip_packages, cache
     )
-    save_details(details, config)
+    save_details(details, run_dir)
 
 
 if __name__ == "__main__":

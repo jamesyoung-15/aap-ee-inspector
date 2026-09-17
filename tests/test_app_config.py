@@ -9,7 +9,10 @@ from aap_ee_inspector.app_config import (
     AppConfig,
     CacheConfig,
     OutputConfig,
-    find_latest_file,
+    find_latest_file_in_run,
+    find_latest_run_dir,
+    is_run_dir_name,
+    list_run_dirs,
     load_config,
 )
 
@@ -42,31 +45,51 @@ class TestAppConfigDefaults:
         assert config.cache.images == []
         assert config.cache.name_patterns == []
 
-    def test_new_output_file_paths_include_timestamp(self):
+    def test_new_run_dir_is_output_dir_slash_timestamp(self):
         config = AppConfig()
-        assert config.new_output_file("20260101T120000") == Path(
-            "outputs/20260101T120000_execution_environments.json"
-        )
-        assert config.new_details_output_file("20260101T120000") == Path(
-            "outputs/20260101T120000_execution_environment_details.json"
-        )
-        assert config.new_report_output_file("20260101T120000") == Path(
-            "outputs/20260101T120000_execution_environment_report.md"
-        )
+        assert config.new_run_dir("20260101T120000") == Path("outputs/20260101T120000")
+
+    def test_latest_run_dir_is_none_when_dir_missing(self, tmp_path):
+        config = AppConfig(output=OutputConfig(dir=tmp_path / "does_not_exist"))
+        assert config.latest_run_dir() is None
 
     def test_latest_output_file_is_none_when_dir_missing(self, tmp_path):
         config = AppConfig(output=OutputConfig(dir=tmp_path / "does_not_exist"))
         assert config.latest_output_file() is None
         assert config.latest_details_output_file() is None
 
-    def test_latest_output_file_returns_most_recent_by_timestamp(self, tmp_path):
+    def test_latest_run_dir_returns_most_recent_by_timestamp(self, tmp_path):
         config = AppConfig(output=OutputConfig(dir=tmp_path))
-        (tmp_path / "20260101T120000_execution_environments.json").write_text("[]")
-        (tmp_path / "20260215T090000_execution_environments.json").write_text("[]")
+        (tmp_path / "20260101T120000").mkdir()
+        (tmp_path / "20260215T090000").mkdir()
+
+        latest = config.latest_run_dir()
+        assert latest is not None
+        assert latest.name == "20260215T090000"
+
+    def test_latest_output_file_returns_file_from_most_recent_run(self, tmp_path):
+        config = AppConfig(output=OutputConfig(dir=tmp_path))
+        (tmp_path / "20260101T120000").mkdir()
+        (tmp_path / "20260101T120000" / "execution_environments.json").write_text("[]")
+        (tmp_path / "20260215T090000").mkdir()
+        (tmp_path / "20260215T090000" / "execution_environments.json").write_text("[]")
 
         latest = config.latest_output_file()
         assert latest is not None
-        assert latest.name == "20260215T090000_execution_environments.json"
+        assert latest.parent.name == "20260215T090000"
+
+    def test_latest_details_output_file_falls_back_to_older_run(self, tmp_path):
+        # Newest run only has execution_environments.json (fetch-only, no
+        # inspect yet); should fall back to an older run that has details.
+        config = AppConfig(output=OutputConfig(dir=tmp_path))
+        (tmp_path / "20260101T120000").mkdir()
+        (tmp_path / "20260101T120000" / "execution_environment_details.json").write_text("[]")
+        (tmp_path / "20260215T090000").mkdir()
+        (tmp_path / "20260215T090000" / "execution_environments.json").write_text("[]")
+
+        latest_details = config.latest_details_output_file()
+        assert latest_details is not None
+        assert latest_details.parent.name == "20260101T120000"
 
 
 class TestCacheConfigShouldKeep:
@@ -105,22 +128,74 @@ class TestCacheConfigShouldKeep:
         assert cache.should_keep("shared-image", ["EE-1", "EE-2"])
 
 
-class TestFindLatestFile:
-    def test_returns_none_for_missing_directory(self, tmp_path):
-        assert find_latest_file(tmp_path / "missing", "foo.json") is None
+class TestIsRunDirName:
+    def test_valid_timestamp_is_a_run_dir(self):
+        assert is_run_dir_name("20260101T120000")
 
-    def test_returns_none_when_no_files_match(self, tmp_path):
+    def test_arbitrary_string_is_not_a_run_dir(self):
+        assert not is_run_dir_name("not-a-timestamp")
+        assert not is_run_dir_name("foo")
+        assert not is_run_dir_name("")
+
+
+class TestListRunDirs:
+    def test_returns_empty_list_for_missing_directory(self, tmp_path):
+        assert list_run_dirs(tmp_path / "missing") == []
+
+    def test_ignores_non_run_dir_entries(self, tmp_path):
         (tmp_path / "unrelated.txt").write_text("")
-        assert find_latest_file(tmp_path, "foo.json") is None
+        (tmp_path / "not_a_timestamp_dir").mkdir()
+        assert list_run_dirs(tmp_path) == []
+
+    def test_sorted_oldest_to_newest(self, tmp_path):
+        (tmp_path / "20261231T235959").mkdir()
+        (tmp_path / "20260101T000000").mkdir()
+        (tmp_path / "20260601T000000").mkdir()
+
+        result = [p.name for p in list_run_dirs(tmp_path)]
+        assert result == ["20260101T000000", "20260601T000000", "20261231T235959"]
+
+
+class TestFindLatestRunDir:
+    def test_returns_none_for_missing_directory(self, tmp_path):
+        assert find_latest_run_dir(tmp_path / "missing") is None
 
     def test_picks_lexicographically_latest_match(self, tmp_path):
-        (tmp_path / "20260101T000000_foo.json").write_text("")
-        (tmp_path / "20261231T235959_foo.json").write_text("")
-        (tmp_path / "20260601T000000_foo.json").write_text("")
+        (tmp_path / "20260101T000000").mkdir()
+        (tmp_path / "20261231T235959").mkdir()
+        (tmp_path / "20260601T000000").mkdir()
 
-        result = find_latest_file(tmp_path, "foo.json")
+        result = find_latest_run_dir(tmp_path)
         assert result is not None
-        assert result.name == "20261231T235959_foo.json"
+        assert result.name == "20261231T235959"
+
+
+class TestFindLatestFileInRun:
+    def test_returns_none_for_missing_directory(self, tmp_path):
+        assert find_latest_file_in_run(tmp_path / "missing", "foo.json") is None
+
+    def test_returns_none_when_no_run_has_the_file(self, tmp_path):
+        (tmp_path / "20260101T000000").mkdir()
+        assert find_latest_file_in_run(tmp_path, "foo.json") is None
+
+    def test_picks_file_from_newest_run_that_has_it(self, tmp_path):
+        (tmp_path / "20260101T000000").mkdir()
+        (tmp_path / "20260101T000000" / "foo.json").write_text("")
+        (tmp_path / "20260601T000000").mkdir()
+        (tmp_path / "20260601T000000" / "foo.json").write_text("")
+
+        result = find_latest_file_in_run(tmp_path, "foo.json")
+        assert result is not None
+        assert result.parent.name == "20260601T000000"
+
+    def test_falls_back_to_older_run_if_newest_lacks_file(self, tmp_path):
+        (tmp_path / "20260101T000000").mkdir()
+        (tmp_path / "20260101T000000" / "foo.json").write_text("")
+        (tmp_path / "20260601T000000").mkdir()  # newest run, but no foo.json
+
+        result = find_latest_file_in_run(tmp_path, "foo.json")
+        assert result is not None
+        assert result.parent.name == "20260101T000000"
 
 
 class TestLoadConfig:
