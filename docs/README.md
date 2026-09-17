@@ -52,11 +52,12 @@ can point at the same image), excluding any matched by `config.toml`'s
 
 1. `<engine> pull <image>`
 2. Runs `ansible --version` and `ansible-galaxy collection list --format json`
-   inside a throwaway container in a single `<engine> run --rm` invocation.
+   (and, if `--pip-list` is enabled, `pip list --format json`) inside a
+   throwaway container in a single `<engine> run --rm` invocation.
 3. Parses ansible-core / Python / jinja versions out of the `ansible --version`
    text output via regex (there is no JSON output mode for `--version`).
-4. Parses and flattens the collection-list JSON into a single
-   `{name: version}` dict.
+4. Parses and flattens the collection-list JSON (and pip-list JSON, if
+   enabled) into `{name: version}` dicts.
 5. `<engine> rmi <image>` to reclaim disk space (images can be several GB each).
 
 Where `<engine>` is `config.toml`'s `[container].engine` (`podman` by
@@ -125,13 +126,37 @@ necessarily the interpreter Ansible actually uses (multiple Pythons can be
 installed). The Python version must be parsed from `ansible --version`'s
 "python version = ..." line, not from a separate `python3 --version` call.
 
+### Optional: pip package listing (`--pip-list`)
+
+By default, only Ansible collections are recorded. To also capture every
+Python package installed in each EE image (via `pip list --format json`),
+either:
+
+```toml
+# config.toml — persistent, applies to every run
+[output]
+include_pip_packages = true
+```
+
+```
+# or per-run, overriding config.toml for just this invocation
+aap-ee-inspect --pip-list
+```
+
+This is opt-in because the package list can be large (100+ transitive
+dependencies per image is typical) and noticeably increases output file
+size; it's most useful for occasional deep-dives rather than every routine
+run.
+
 ## Stage 3: `generate_report.py` (entry point: `aap-ee-report`)
 
 Renders the latest (or `--input`-specified) execution environment details
 file into a single timestamped Markdown file for quick human reference —
 one `##` section per unique image, with collections listed in a fenced code
-block (one per line, sorted alphabetically). Successful inspections are
-listed first; failed/skipped images are grouped in a trailing section.
+block (one per line, sorted alphabetically). If pip package data was
+collected, it's rendered in a second code block per image. Successful
+inspections are listed first; failed/skipped images are grouped in a
+trailing section.
 
 ## Data models (`models.py`)
 

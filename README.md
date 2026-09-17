@@ -3,8 +3,8 @@
 Fetches every execution environment (EE) available in Ansible Automation
 Platform (AAP), then pulls each EE image locally with podman or docker to
 inspect what's actually installed inside it: `ansible-core` version, Python
-version, `jinja` version, and every Ansible collection (with version)
-baked into the image.
+version, `jinja` version, every Ansible collection (with version) baked
+into the image, and optionally every pip-installed Python package.
 
 Output is written to `outputs/`, timestamped so each run gets its own file
 rather than overwriting the last:
@@ -93,6 +93,14 @@ latest, pass `--input`:
 ```bash
 uv run aap-ee-inspect --input outputs/20260101T120000_execution_environments.json
 uv run aap-ee-report --input outputs/20260101T120000_execution_environment_details.json
+```
+
+To also capture every pip-installed Python package per EE image (off by
+default — the package list can be large), pass `--pip-list` or set
+`[output].include_pip_packages = true` in `config.toml`:
+
+```bash
+uv run aap-ee-inspect --pip-list
 ```
 
 ## Development
