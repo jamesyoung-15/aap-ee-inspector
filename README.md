@@ -33,7 +33,7 @@ breakdown of how the pipeline works internally.
 
 Create a `.env` file in the project root (secrets, never committed):
 
-```
+```env
 AAP_API_TOKEN=<your-bearer-token>
 AAP_BASE_URL=<aap-controller-hostname, no scheme>
 ```
