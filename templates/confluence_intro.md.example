@@ -8,9 +8,6 @@ Use this page as a reference when:
 - Checking which version of a collection is available in a given EE
 - Investigating why a collection API changed between two EE versions
 
-The EE images themselves are managed by the platform team. See your organization's EE source
-repository for build definitions and release history.
-
 ---
 
 *The section below is auto-generated and updated
