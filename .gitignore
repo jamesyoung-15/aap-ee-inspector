@@ -221,3 +221,7 @@ venv.bak/
 !.env.example
 
 outputs/
+
+# Local-only Confluence intro (edit freely without git tracking it)
+# Copy templates/confluence_intro.md.example -> templates/confluence_intro.md to get started
+templates/confluence_intro.md
