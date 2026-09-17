@@ -1,9 +1,16 @@
 # Configuration for aap-ee-inspector.
-# Secrets (AAP_API_TOKEN, AAP_BASE_URL) stay in .env; this file is for
-# non-secret settings that are safe to commit and tweak per environment.
+# Secrets (AAP_API_TOKEN, AAP_BASE_URL, CONFLUENCE_*) stay in .env; this file
+# is for non-secret settings that are safe to commit and tweak per environment.
 
 [api]
 execution_environments_path = "/api/controller/v2/execution_environments/"
+
+[confluence]
+# ID of the Confluence page to publish the report to (used by
+# `aap-ee-publish`). Find it in the page URL, e.g.
+# https://yourcompany.atlassian.net/wiki/spaces/TEAM/pages/<page_id>/Title
+# Auth (base URL, email, API token) lives in .env, not here.
+page_id = "19074352100"
 
 [output]
 dir = "outputs"
@@ -56,7 +63,7 @@ keep_all = false
 # that exact image.
 # Example: keep every version of the "amfam_default" EE family cached.
 images = []
-# images = ["*/amfam_default:*"]
+# images = ["*/amfam_default*"]
 
 # Glob patterns (fnmatch syntax) matched against EE names. An image is kept
 # cached if any of its associated EE names match any pattern here.

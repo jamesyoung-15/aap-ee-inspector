@@ -39,6 +39,11 @@ Create a `.env` file in the project root (secrets, never committed):
 ```env
 AAP_API_TOKEN=<your-bearer-token>
 AAP_BASE_URL=<aap-controller-hostname, no scheme>
+
+# Optional — only needed for `aap-ee-publish`
+CONFLUENCE_BASE_URL=https://yourcompany.atlassian.net/wiki
+CONFLUENCE_EMAIL=you@yourcompany.com
+CONFLUENCE_API_TOKEN=<atlassian api token, see id.atlassian.com/manage-profile/security/api-tokens>
 ```
 
 Non-secret settings (output paths, output fields, and images/EE names to
@@ -129,6 +134,36 @@ with layer deduplication accounted for — see
 methodology). If you use `podman machine` on macOS, its VM has its own disk
 allocation separate from your Mac's free space — check with
 `podman machine list`.
+
+### Publishing to Confluence
+
+`aap-ee-publish` takes the latest generated report and publishes it to a
+Confluence page. Requires the `CONFLUENCE_*` variables in `.env` and
+`[confluence].page_id` set in `config.toml`:
+
+```toml
+[confluence]
+page_id = "19074352100"  # find it in the page URL
+```
+
+```bash
+uv run aap-ee-publish
+uv run aap-ee-publish --only "amfam_default:1.21,vmware_env:*"
+uv run aap-ee-publish --input outputs/20260101T120000
+```
+
+**Optional intro**: if `templates/confluence_intro.md` exists, its content is
+rendered as the hand-written intro above the report on the Confluence page.
+The file is gitignored (local-only, like `.env`), so you can edit it freely
+without it appearing in commits. To get started, copy the example:
+
+```bash
+cp templates/confluence_intro.md.example templates/confluence_intro.md
+# then edit templates/confluence_intro.md as needed
+```
+
+If the file doesn't exist, `aap-ee-publish` runs fine and publishes
+report-only (no intro).
 
 ## Development
 

@@ -1,0 +1,18 @@
+This page documents every Execution Environment (EE) registered in Ansible Automation Platform (AAP).
+Each EE is a container image that defines the runtime context for Ansible automation — including
+the version of `ansible-core`, Python, and every Ansible collection available to jobs that use it.
+
+Use this page as a reference when:
+
+- Deciding which EE to target for a new playbook or role
+- Checking which version of a collection is available in a given EE
+- Investigating why a collection API changed between two EE versions
+
+The EE images themselves are managed by the platform team. See your organization's EE source
+repository for build definitions and release history.
+
+---
+
+*The section below is auto-generated and updated
+periodically. Edit `templates/confluence_intro.md` (not this `.example` file) to customize
+the intro for your organization.*

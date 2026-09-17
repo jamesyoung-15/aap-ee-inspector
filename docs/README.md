@@ -212,6 +212,44 @@ collected, it's rendered in a second code block per image. Successful
 inspections are listed first; failed/skipped images are grouped in a
 trailing section.
 
+## Stage 4 (optional): `publish_confluence_report.py` (entry point: `aap-ee-publish`)
+
+Publishes the latest (or `--input`-specified) execution environment details
+to a Confluence page, entirely separate from the run-directory pipeline
+above (it reads `execution_environment_details.json` directly, the same
+way `aap-ee-report` does, but doesn't write anything into the run
+directory itself).
+
+1. Reads `config.toml`'s `[confluence].page_id` and `.env`'s
+   `CONFLUENCE_BASE_URL` / `CONFLUENCE_EMAIL` / `CONFLUENCE_API_TOKEN`.
+2. Renders `templates/confluence_intro.md` (via Jinja2, then Markdown → HTML)
+   for the optional hand-written intro section. If the file doesn't exist,
+   the intro is skipped and only the report + footnote are published. The
+   file is gitignored (local-only, like `.env`) — copy
+   `templates/confluence_intro.md.example` to get started.
+3. Renders the report body directly into Confluence **storage format**
+   XHTML (`confluence_report.py`) — a separate renderer from the Markdown
+   one in `generate_report.py`, so collection listings become native
+   `<ac:structured-macro ac:name="code">` blocks (proper syntax-highlight-off
+   code blocks with a copy button) rather than a lossy Markdown-to-HTML
+   conversion.
+4. Renders an "Excluded Execution Environments" footnote from
+   `config.toml`'s `[exclusions].name_patterns`.
+5. `GET`s the current page to read its version number (Confluence's update
+   API requires the exact next version number for its optimistic-concurrency
+   check — there's no "auto-increment" option), then `PUT`s the assembled
+   intro + report + footnote as the new page body.
+
+This does a **full-page replace** every run, matching how the report
+itself is a full re-dump each time — there's no attempt to diff/patch the
+live page. Crucially, the intro (when present) is sourced from the local
+`templates/confluence_intro.md` file, not scraped from the live page, so
+there's no fragile "find where the auto-generated section starts" logic
+(an earlier prototype tried an HTML-comment marker for this and found
+Confluence's markdown-to-storage-format conversion silently strips HTML
+comments — storage-format-native rendering with a locally-sourced intro
+avoids that problem entirely).
+
 ## Data models (`models.py`)
 
 Two families of Pydantic models:
@@ -227,14 +265,16 @@ Two families of Pydantic models:
 
 Two separate configuration sources, intentionally kept apart:
 
-- **`config.py` (`Settings`)** — secrets, sourced from environment
-  variables / `.env`: `AAP_API_TOKEN`, `AAP_BASE_URL`. Never committed.
+- **`config.py` (`Settings`, `ConfluenceSettings`)** — secrets, sourced from
+  environment variables / `.env`: `AAP_API_TOKEN`, `AAP_BASE_URL`, and
+  (only needed for `aap-ee-publish`) `CONFLUENCE_BASE_URL`,
+  `CONFLUENCE_EMAIL`, `CONFLUENCE_API_TOKEN`. Never committed.
 - **`app_config.py` (`AppConfig`)** — everything else: the AAP API path,
   output directory/filenames, which output fields to keep, inspect-stage
-  exclusions, and image cache retention. Sourced from `config.toml` in the
-  repo root, which *is* meant to be committed and edited directly. If
-  `config.toml` is missing, `load_config()` falls back to built-in defaults
-  rather than erroring.
+  exclusions, image cache retention, and the Confluence page ID to publish
+  to. Sourced from `config.toml` in the repo root, which *is* meant to be
+  committed and edited directly. If `config.toml` is missing,
+  `load_config()` falls back to built-in defaults rather than erroring.
 
 ## Known limitations
 

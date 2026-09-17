@@ -70,6 +70,18 @@ class ExclusionsConfig(BaseModel):
     name_patterns: list[str] = Field(default_factory=list)
 
 
+class ConfluenceConfig(BaseModel):
+    """Non-secret Confluence publishing settings.
+
+    page_id: ID of the Confluence page to publish the report to. Find it in
+        the page URL, e.g. .../wiki/spaces/TEAM/pages/<page_id>/Page+Title.
+        Auth (base URL, email, API token) lives in .env / ConfluenceSettings
+        since those are secrets.
+    """
+
+    page_id: str = ""
+
+
 class CacheConfig(BaseModel):
     """Controls whether pulled EE images are removed after inspection or kept.
 
@@ -110,6 +122,7 @@ class AppConfig(BaseModel):
     container: ContainerConfig = Field(default_factory=ContainerConfig)
     exclusions: ExclusionsConfig = Field(default_factory=ExclusionsConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
+    confluence: ConfluenceConfig = Field(default_factory=ConfluenceConfig)
 
     def new_run_dir(self, timestamp: str) -> Path:
         """Path to a new run directory: outputs/<timestamp>/."""

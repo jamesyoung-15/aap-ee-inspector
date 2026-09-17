@@ -16,6 +16,11 @@ tasks:
     cmds:
       - uv run aap-ee-report {{.CLI_ARGS}}
 
+  publish:
+    desc: Publish the latest inspection report to Confluence (requires CONFLUENCE_* in .env)
+    cmds:
+      - uv run aap-ee-publish {{.CLI_ARGS}}
+
   all:
     desc: "Run the full pipeline: fetch, inspect, report"
     cmds:

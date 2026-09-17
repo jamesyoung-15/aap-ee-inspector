@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `aap-ee-publish` (`publish_confluence_report.py`): new CLI entry that reads
+  the latest `execution_environment_details.json` and publishes a full-page
+  Confluence update using Confluence storage-format XHTML with native
+  code-block macros (no lossy Markdown conversion). Includes a static
+  hand-written intro from `templates/confluence_intro.md` (Jinja2 + Markdown
+  → HTML) and an excluded-EE footnote from `config.toml`'s
+  `[exclusions].name_patterns`. Configured via `CONFLUENCE_BASE_URL`,
+  `CONFLUENCE_EMAIL`, `CONFLUENCE_API_TOKEN` in `.env` and
+  `[confluence].page_id` in `config.toml`. Supports `--only` and `--input`.
+  Verified end-to-end against a live Confluence page.
+- `confluence_report.py`: Confluence storage-format XHTML renderer mirroring
+  the existing Markdown renderer in `generate_report.py`, rendering
+  collections and pip packages as native `<ac:structured-macro ac:name="code">`
+  macros (language: none, CDATA bodies).
+- `templates/confluence_intro.md`: version-controlled, hand-editable source
+  for the static intro section of the Confluence page.
+- `[confluence].page_id` in `config.toml`: non-secret Confluence page target.
+- `ConfluenceSettings` in `config.py`: pydantic-settings class loading
+  Confluence auth from `.env`.
+
 ## [0.1.0] - 2026-09-17
 
 First release. A CLI pipeline to fetch every execution environment (EE)
