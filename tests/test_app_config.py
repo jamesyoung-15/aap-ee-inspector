@@ -5,7 +5,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from aap_ee_inspector.app_config import AppConfig, OutputConfig, find_latest_file, load_config
+from aap_ee_inspector.app_config import (
+    AppConfig,
+    CacheConfig,
+    OutputConfig,
+    find_latest_file,
+    load_config,
+)
 
 
 class TestAppConfigDefaults:
@@ -29,6 +35,12 @@ class TestAppConfigDefaults:
     def test_default_include_pip_packages_is_false(self):
         config = AppConfig()
         assert config.output.include_pip_packages is False
+
+    def test_default_cache_is_remove_everything(self):
+        config = AppConfig()
+        assert config.cache.keep_all is False
+        assert config.cache.images == []
+        assert config.cache.name_patterns == []
 
     def test_new_output_file_paths_include_timestamp(self):
         config = AppConfig()
@@ -55,6 +67,32 @@ class TestAppConfigDefaults:
         latest = config.latest_output_file()
         assert latest is not None
         assert latest.name == "20260215T090000_execution_environments.json"
+
+
+class TestCacheConfigShouldKeep:
+    def test_keep_all_overrides_everything(self):
+        cache = CacheConfig(keep_all=True)
+        assert cache.should_keep("any-image", ["any-name"])
+
+    def test_exact_image_match_is_kept(self):
+        cache = CacheConfig(images=["registry.example.com/foo:1.0"])
+        assert cache.should_keep("registry.example.com/foo:1.0", ["some-name"])
+
+    def test_name_pattern_match_is_kept(self):
+        cache = CacheConfig(name_patterns=["amfam_default:*"])
+        assert cache.should_keep("some-image", ["amfam_default:1.21"])
+
+    def test_no_match_is_not_kept(self):
+        cache = CacheConfig(images=["other-image"], name_patterns=["other:*"])
+        assert not cache.should_keep("some-image", ["some-name"])
+
+    def test_default_config_keeps_nothing(self):
+        cache = CacheConfig()
+        assert not cache.should_keep("any-image", ["any-name"])
+
+    def test_kept_if_any_of_multiple_names_matches(self):
+        cache = CacheConfig(name_patterns=["EE-2"])
+        assert cache.should_keep("shared-image", ["EE-1", "EE-2"])
 
 
 class TestFindLatestFile:
@@ -126,3 +164,17 @@ class TestLoadConfig:
 
         config = load_config(path=toml_path)
         assert config.output.include_pip_packages is True
+
+    def test_loads_cache_config_from_toml(self, tmp_path):
+        toml_path = tmp_path / "config.toml"
+        toml_path.write_text(
+            "[cache]\n"
+            "keep_all = true\n"
+            'images = ["registry.example.com/pinned:1.0"]\n'
+            'name_patterns = ["amfam_default:*"]\n'
+        )
+
+        config = load_config(path=toml_path)
+        assert config.cache.keep_all is True
+        assert config.cache.images == ["registry.example.com/pinned:1.0"]
+        assert config.cache.name_patterns == ["amfam_default:*"]

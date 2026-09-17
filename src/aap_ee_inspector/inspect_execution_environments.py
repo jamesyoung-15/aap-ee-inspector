@@ -7,7 +7,7 @@ narrowed by --only if given), pulls the image, runs `ansible --version` and
 --format json`) inside a throwaway container, parses out the
 ansible-core/python/jinja versions and the installed collection (and
 optionally pip package) versions, then removes the image again to reclaim
-disk space.
+disk space (unless kept per config.toml's [cache] section or --keep-cache).
 
 Requires:
     - a <timestamp>_execution_environments.json to already exist in the
@@ -20,6 +20,7 @@ Usage:
     aap-ee-inspect --only "amfam_default:1.21,vmware_env:*"
     aap-ee-inspect --input outputs/20260101T120000_execution_environments.json
     aap-ee-inspect --pip-list
+    aap-ee-inspect --keep-cache
 """
 
 from __future__ import annotations
@@ -31,7 +32,13 @@ import subprocess
 from collections import defaultdict
 from pathlib import Path
 
-from aap_ee_inspector.app_config import AppConfig, ExclusionsConfig, current_timestamp, load_config
+from aap_ee_inspector.app_config import (
+    AppConfig,
+    CacheConfig,
+    ExclusionsConfig,
+    current_timestamp,
+    load_config,
+)
 from aap_ee_inspector.filters import matches_any, parse_csv_patterns
 from aap_ee_inspector.models import ExecutionEnvironmentDetails
 
@@ -214,12 +221,16 @@ def inspect_all_images(
     images_to_names: dict[str, list[str]],
     engine: str,
     include_pip_packages: bool = False,
+    cache: CacheConfig | None = None,
 ) -> list[ExecutionEnvironmentDetails]:
     """Pull, inspect, and clean up each image, collecting results as we go.
 
     Failures (pull or inspect) for a single image are recorded on that
-    image's result rather than aborting the whole batch.
+    image's result rather than aborting the whole batch. Images matched by
+    `cache` (or `cache.keep_all`) are left in local storage instead of being
+    removed after inspection.
     """
+    cache = cache or CacheConfig()
     details: list[ExecutionEnvironmentDetails] = []
     total = len(images_to_names)
 
@@ -267,8 +278,11 @@ def inspect_all_images(
                 )
             )
         finally:
-            print("  removing local image...")
-            remove_image(image, engine)
+            if cache.should_keep(image, names):
+                print("  keeping image cached (per [cache] config)")
+            else:
+                print("  removing local image...")
+                remove_image(image, engine)
 
     return details
 
@@ -315,6 +329,16 @@ def parse_args() -> argparse.Namespace:
             "for this run. Warning: can significantly increase output size."
         ),
     )
+    parser.add_argument(
+        "--keep-cache",
+        action="store_true",
+        default=None,
+        help=(
+            "Keep every pulled image cached locally instead of removing it "
+            "after inspection. Overrides config.toml's [cache].keep_all for "
+            "this run. Speeds up subsequent runs at the cost of disk space."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -327,6 +351,11 @@ def main() -> None:
     include_pip_packages = (
         args.pip_list if args.pip_list is not None else config.output.include_pip_packages
     )
+    cache = config.cache
+    if args.keep_cache is not None:
+        cache = CacheConfig(
+            keep_all=args.keep_cache, images=cache.images, name_patterns=cache.name_patterns
+        )
 
     input_file = resolve_input_file(config, args.input)
     print(f"Reading execution environments from {input_file}")
@@ -336,7 +365,13 @@ def main() -> None:
     print(f"Using container engine: {config.container.engine}")
     if include_pip_packages:
         print("pip list collection: enabled")
-    details = inspect_all_images(images_to_names, config.container.engine, include_pip_packages)
+    if cache.keep_all:
+        print("Image caching: keeping ALL images after inspection")
+    elif cache.images or cache.name_patterns:
+        print("Image caching: keeping images matching [cache] config")
+    details = inspect_all_images(
+        images_to_names, config.container.engine, include_pip_packages, cache
+    )
     save_details(details, config)
 
 

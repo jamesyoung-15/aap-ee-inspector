@@ -37,3 +37,19 @@ name_patterns = [
     "Control Plane Execution Environment",
     "Minimal execution environment",
 ]
+
+[cache]
+# By default, every image is pulled, inspected, and removed again after
+# inspection to reclaim disk space. Set keep_all = true to keep every image
+# cached locally instead, which speeds up subsequent runs at the cost of
+# disk space (roughly 1-2GB per unique image, though EE version tags that
+# share base layers cost less than their full size suggests). Can also be
+# toggled per-run with `aap-ee-inspect --keep-cache`.
+keep_all = false
+
+# Exact image references to always keep cached, regardless of keep_all.
+images = []
+
+# Glob patterns (fnmatch syntax) matched against EE names. An image is kept
+# cached if any of its associated EE names match any pattern here.
+name_patterns = []

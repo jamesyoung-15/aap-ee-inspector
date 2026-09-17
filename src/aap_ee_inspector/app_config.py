@@ -15,6 +15,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from aap_ee_inspector.filters import matches_any
+
 DEFAULT_CONFIG_PATH = Path("config.toml")
 
 # Filename timestamp format: sorts lexicographically in chronological order.
@@ -63,6 +65,36 @@ class ExclusionsConfig(BaseModel):
     name_patterns: list[str] = Field(default_factory=list)
 
 
+class CacheConfig(BaseModel):
+    """Controls whether pulled EE images are removed after inspection or kept.
+
+    By default, every image is pulled, inspected, and removed again to
+    reclaim disk space. This section lets you opt into keeping some or all
+    images cached locally to speed up subsequent runs, at the cost of disk
+    space (roughly 1-2GB per unique image, though shared base layers between
+    EE version tags reduce the actual total).
+
+    keep_all: if true, never remove any image after inspection.
+    images: exact image references to always keep cached, regardless of
+        keep_all.
+    name_patterns: glob patterns (fnmatch syntax) matched against EE names;
+        an image is kept cached if any of its associated EE names match any
+        pattern here.
+    """
+
+    keep_all: bool = False
+    images: list[str] = Field(default_factory=list)
+    name_patterns: list[str] = Field(default_factory=list)
+
+    def should_keep(self, image: str, names: list[str]) -> bool:
+        """Return True if `image` should be kept cached rather than removed."""
+        if self.keep_all:
+            return True
+        if image in self.images:
+            return True
+        return any(matches_any(name, self.name_patterns) for name in names)
+
+
 class AppConfig(BaseModel):
     """Top-level application configuration, loaded from config.toml."""
 
@@ -70,6 +102,7 @@ class AppConfig(BaseModel):
     output: OutputConfig = Field(default_factory=OutputConfig)
     container: ContainerConfig = Field(default_factory=ContainerConfig)
     exclusions: ExclusionsConfig = Field(default_factory=ExclusionsConfig)
+    cache: CacheConfig = Field(default_factory=CacheConfig)
 
     def new_output_file(self, timestamp: str) -> Path:
         """Path for a new, timestamped execution_environments.json."""
