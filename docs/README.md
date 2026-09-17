@@ -58,7 +58,9 @@ can point at the same image), excluding any matched by `config.toml`'s
    text output via regex (there is no JSON output mode for `--version`).
 4. Parses and flattens the collection-list JSON (and pip-list JSON, if
    enabled) into `{name: version}` dicts.
-5. `<engine> rmi <image>` to reclaim disk space (images can be several GB each).
+5. `<engine> rmi <image>` to reclaim disk space (images can be several GB each),
+   unless the image is configured to be kept — see
+   [Keeping images cached](#keeping-images-cached-cache) below.
 
 Where `<engine>` is `config.toml`'s `[container].engine` (`podman` by
 default). Podman and Docker use compatible `pull`/`run --rm`/`rmi` command
@@ -101,6 +103,42 @@ name_patterns = ["rhel6_env:*", "Minimal execution environment"]
 
 Excluded images are skipped entirely (never pulled) and printed as a summary
 count at the start of the inspect run.
+
+### Keeping images cached (`[cache]`)
+
+By default every image is removed (`<engine> rmi`) immediately after
+inspection to reclaim disk space. Since pulling is the slow part of a run
+(inspection itself is fast), you can opt into keeping some or all images
+cached locally so re-runs skip the pull step entirely for images already
+present:
+
+```toml
+[cache]
+keep_all = false          # true = never remove any image
+images = []                # exact image refs to always keep
+name_patterns = []         # glob patterns matched against EE names
+```
+
+- `keep_all = true` keeps every image, unconditionally.
+- `images`/`name_patterns` use the same exact-match / `fnmatch`-glob
+  semantics as `[exclusions]`, but for retention instead of skipping.
+- Per-run override without editing `config.toml`: `aap-ee-inspect --keep-cache`
+  (forces `keep_all` behavior for that invocation only).
+
+**Disk space guidance**: based on querying the GitLab container registry
+directly for compressed layer sizes across the ~23 actively-inspected EE
+images (excluding config-excluded ones), and cross-checking against
+observed on-disk sizes (uncompressed images run roughly 3.9-4.1x their
+compressed registry size for these RHEL/Python-based images), keeping
+**every currently-inspectable image cached costs roughly 43-45GB**. Layer
+deduplication (shared base layers across `amfam_default:*` version tags,
+handled automatically by podman/Docker) is the main reason this is much
+less than the naive per-image sum (~65GB) would suggest.
+
+If running podman via `podman machine` on macOS, note the VM has its own
+disk allocation independent of the host Mac's free space (check with
+`podman machine list`; default is commonly 100GB) — that's the actual
+constraint to watch, not the host disk.
 
 ### Filtering to specific EEs (`--only`)
 
@@ -176,10 +214,11 @@ Two separate configuration sources, intentionally kept apart:
 - **`config.py` (`Settings`)** — secrets, sourced from environment
   variables / `.env`: `AAP_API_TOKEN`, `AAP_BASE_URL`. Never committed.
 - **`app_config.py` (`AppConfig`)** — everything else: the AAP API path,
-  output directory/filenames, which output fields to keep, and inspect-stage
-  exclusions. Sourced from `config.toml` in the repo root, which *is* meant
-  to be committed and edited directly. If `config.toml` is missing,
-  `load_config()` falls back to built-in defaults rather than erroring.
+  output directory/filenames, which output fields to keep, inspect-stage
+  exclusions, and image cache retention. Sourced from `config.toml` in the
+  repo root, which *is* meant to be committed and edited directly. If
+  `config.toml` is missing, `load_config()` falls back to built-in defaults
+  rather than erroring.
 
 ## Known limitations
 

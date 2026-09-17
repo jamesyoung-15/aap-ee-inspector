@@ -103,6 +103,30 @@ default — the package list can be large), pass `--pip-list` or set
 uv run aap-ee-inspect --pip-list
 ```
 
+By default, every pulled image is removed after inspection to reclaim disk
+space. To keep images cached locally and speed up subsequent runs, pass
+`--keep-cache` (keeps everything) or configure `[cache]` in `config.toml`
+to keep specific images/patterns:
+
+```bash
+uv run aap-ee-inspect --keep-cache
+```
+
+```toml
+[cache]
+keep_all = false
+images = []
+name_patterns = ["amfam_default:*"]  # keep only this EE family cached
+```
+
+Rough disk cost if keeping everything cached: **~43-45GB** for the current
+set of actively-inspected EE images (measured via registry manifest sizes
+with layer deduplication accounted for — see
+[docs/README.md](docs/README.md#keeping-images-cached-cache) for the
+methodology). If you use `podman machine` on macOS, its VM has its own disk
+allocation separate from your Mac's free space — check with
+`podman machine list`.
+
 ## Development
 
 ```bash
