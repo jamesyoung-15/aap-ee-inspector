@@ -3,9 +3,10 @@
 For each unique image referenced in the latest execution_environments.json
 (excluding any matched by config.toml's [exclusions] section, and further
 narrowed by --only if given), pulls the image, runs `ansible --version` and
-`ansible-galaxy collection list --format json` inside a throwaway
-container, parses out the ansible-core/python/jinja versions and the
-installed collection versions, then removes the image again to reclaim
+`ansible-galaxy collection list --format json` (and, if enabled, `pip list
+--format json`) inside a throwaway container, parses out the
+ansible-core/python/jinja versions and the installed collection (and
+optionally pip package) versions, then removes the image again to reclaim
 disk space.
 
 Requires:
@@ -18,6 +19,7 @@ Usage:
     aap-ee-inspect
     aap-ee-inspect --only "amfam_default:1.21,vmware_env:*"
     aap-ee-inspect --input outputs/20260101T120000_execution_environments.json
+    aap-ee-inspect --pip-list
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ from aap_ee_inspector.filters import matches_any, parse_csv_patterns
 from aap_ee_inspector.models import ExecutionEnvironmentDetails
 
 ANSIBLE_VERSION_SEPARATOR = "---SEP---"
+PIP_LIST_SEPARATOR = "---PIP-SEP---"
 
 CORE_VERSION_RE = re.compile(r"ansible \[core ([\d.]+)\]")
 PYTHON_VERSION_RE = re.compile(r"python version = ([\d.]+)")
@@ -112,17 +115,21 @@ def remove_image(image: str, engine: str) -> None:
     subprocess.run([engine, "rmi", image], capture_output=True, text=True, check=False)
 
 
-def run_in_container(image: str, engine: str) -> str:
+def run_in_container(image: str, engine: str, include_pip_packages: bool = False) -> str:
     """Run the version/collection-listing commands inside a throwaway container.
 
-    Returns combined stdout containing both the `ansible --version` output
-    and the `ansible-galaxy collection list --format json` output, separated
-    by ANSIBLE_VERSION_SEPARATOR.
+    Returns combined stdout containing the `ansible --version` output, the
+    `ansible-galaxy collection list --format json` output (separated by
+    ANSIBLE_VERSION_SEPARATOR), and, if `include_pip_packages` is set, the
+    `pip list --format json` output (separated by PIP_LIST_SEPARATOR).
     """
     command = (
         f"ansible --version; echo '{ANSIBLE_VERSION_SEPARATOR}'; "
         "ansible-galaxy collection list --format json"
     )
+    if include_pip_packages:
+        command += f"; echo '{PIP_LIST_SEPARATOR}'; pip list --format json"
+
     result = subprocess.run(
         [engine, "run", "--rm", image, "sh", "-c", command],
         capture_output=True,
@@ -170,21 +177,43 @@ def parse_collections_block(text: str) -> dict[str, str]:
     return collections
 
 
+def parse_pip_list_block(text: str) -> dict[str, str]:
+    """Flatten `pip list --format json` output ([{"name": ..., "version": ...}, ...])
+    into a single {name: version} dict, matching the collections dict shape.
+    """
+    start = text.find("[")
+    if start == -1:
+        return {}
+
+    data = json.loads(text[start:])
+    return {entry["name"]: entry["version"] for entry in data}
+
+
 def inspect_image(
-    image: str, engine: str
-) -> tuple[str | None, str | None, str | None, dict[str, str]]:
-    """Pull-independent inspection step: run version/collection commands and parse them."""
-    output = run_in_container(image, engine)
-    ansible_block, _, collections_block = output.partition(ANSIBLE_VERSION_SEPARATOR)
+    image: str, engine: str, include_pip_packages: bool = False
+) -> tuple[str | None, str | None, str | None, dict[str, str], dict[str, str]]:
+    """Pull-independent inspection step: run version/collection/pip commands and parse them."""
+    output = run_in_container(image, engine, include_pip_packages=include_pip_packages)
+    ansible_block, _, remainder = output.partition(ANSIBLE_VERSION_SEPARATOR)
 
     core_version, python_version, jinja_version = parse_ansible_version_block(ansible_block)
+
+    if include_pip_packages:
+        collections_block, _, pip_block = remainder.partition(PIP_LIST_SEPARATOR)
+        python_packages = parse_pip_list_block(pip_block)
+    else:
+        collections_block = remainder
+        python_packages = {}
+
     collections = parse_collections_block(collections_block)
 
-    return core_version, python_version, jinja_version, collections
+    return core_version, python_version, jinja_version, collections, python_packages
 
 
 def inspect_all_images(
-    images_to_names: dict[str, list[str]], engine: str
+    images_to_names: dict[str, list[str]],
+    engine: str,
+    include_pip_packages: bool = False,
 ) -> list[ExecutionEnvironmentDetails]:
     """Pull, inspect, and clean up each image, collecting results as we go.
 
@@ -209,7 +238,9 @@ def inspect_all_images(
 
         try:
             print("  inspecting...")
-            core_version, python_version, jinja_version, collections = inspect_image(image, engine)
+            core_version, python_version, jinja_version, collections, python_packages = (
+                inspect_image(image, engine, include_pip_packages=include_pip_packages)
+            )
             details.append(
                 ExecutionEnvironmentDetails(
                     names=names,
@@ -218,12 +249,16 @@ def inspect_all_images(
                     python_version=python_version,
                     jinja_version=jinja_version,
                     collections=collections,
+                    python_packages=python_packages,
                 )
             )
-            print(
+            summary = (
                 f"  ok: ansible-core={core_version}, python={python_version}, "
                 f"{len(collections)} collections"
             )
+            if include_pip_packages:
+                summary += f", {len(python_packages)} pip packages"
+            print(summary)
         except (RuntimeError, json.JSONDecodeError) as exc:
             print(f"  FAILED to inspect: {exc}")
             details.append(
@@ -270,6 +305,16 @@ def parse_args() -> argparse.Namespace:
             "Defaults to the most recently generated file in the output directory."
         ),
     )
+    parser.add_argument(
+        "--pip-list",
+        action="store_true",
+        default=None,
+        help=(
+            "Also run `pip list` inside each EE image and record installed "
+            "Python packages. Overrides config.toml's [output].include_pip_packages "
+            "for this run. Warning: can significantly increase output size."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -279,13 +324,19 @@ def main() -> None:
     only = parse_csv_patterns(args.only)
 
     config = load_config()
+    include_pip_packages = (
+        args.pip_list if args.pip_list is not None else config.output.include_pip_packages
+    )
+
     input_file = resolve_input_file(config, args.input)
     print(f"Reading execution environments from {input_file}")
 
     images_to_names = load_images(input_file, config, only=only)
     print(f"Found {len(images_to_names)} unique images across the execution environment list.")
     print(f"Using container engine: {config.container.engine}")
-    details = inspect_all_images(images_to_names, config.container.engine)
+    if include_pip_packages:
+        print("pip list collection: enabled")
+    details = inspect_all_images(images_to_names, config.container.engine, include_pip_packages)
     save_details(details, config)
 
 

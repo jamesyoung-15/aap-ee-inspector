@@ -37,6 +37,10 @@ class OutputConfig(BaseModel):
     dir: Path = Path("outputs")
     # Fields to keep in execution_environments.json. None/omitted = all fields.
     fields: list[str] | None = None
+    # Opt-in: also run `pip list` inside each EE image during inspection.
+    # Off by default since the package list can be very large (hundreds of
+    # transitive dependencies) and significantly bloats the output files.
+    include_pip_packages: bool = False
 
 
 class ContainerConfig(BaseModel):

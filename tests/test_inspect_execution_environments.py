@@ -15,6 +15,7 @@ from aap_ee_inspector.inspect_execution_environments import (
     load_images,
     parse_ansible_version_block,
     parse_collections_block,
+    parse_pip_list_block,
     resolve_input_file,
 )
 
@@ -82,6 +83,31 @@ class TestParseCollectionsBlock:
         text = "WARNING: some galaxy warning\n" + SAMPLE_COLLECTIONS_JSON
         collections = parse_collections_block(text)
         assert collections == {"amazon.aws": "9.5.1", "community.vmware": "6.2.0"}
+
+
+SAMPLE_PIP_LIST_JSON = json.dumps(
+    [
+        {"name": "certifi", "version": "2026.7.22"},
+        {"name": "cryptography", "version": "50.0.1"},
+    ]
+)
+
+
+class TestParsePipListBlock:
+    def test_flattens_list_to_name_version_dict(self):
+        packages = parse_pip_list_block(SAMPLE_PIP_LIST_JSON)
+        assert packages == {"certifi": "2026.7.22", "cryptography": "50.0.1"}
+
+    def test_no_json_array_returns_empty_dict(self):
+        assert parse_pip_list_block("no json here") == {}
+
+    def test_skips_warning_text_before_json(self):
+        text = "WARNING: pip warning\n" + SAMPLE_PIP_LIST_JSON
+        packages = parse_pip_list_block(text)
+        assert packages == {"certifi": "2026.7.22", "cryptography": "50.0.1"}
+
+    def test_empty_list_returns_empty_dict(self):
+        assert parse_pip_list_block("[]") == {}
 
 
 class TestIsExcluded:

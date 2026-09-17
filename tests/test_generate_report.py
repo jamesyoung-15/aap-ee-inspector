@@ -53,6 +53,22 @@ class TestRenderEntry:
         markdown = render_entry(make_details(names=["EE-1", "EE-2"]))
         assert markdown.startswith("## EE-1 / EE-2")
 
+    def test_no_pip_packages_section_when_empty(self):
+        markdown = render_entry(make_details())
+        assert "pip list" not in markdown
+
+    def test_pip_packages_rendered_in_second_code_block_sorted(self):
+        markdown = render_entry(
+            make_details(python_packages={"cryptography": "50.0.1", "certifi": "2026.7.22"})
+        )
+        assert "Python packages installed (pip list)**: 2" in markdown
+        lines = markdown.splitlines()
+        blocks = [i for i, line in enumerate(lines) if line == "```"]
+        assert len(blocks) == 4  # two code blocks: collections, then pip packages
+        pip_start, pip_end = blocks[2], blocks[3]
+        pip_lines = lines[pip_start + 1 : pip_end]
+        assert pip_lines == ["certifi 2026.7.22", "cryptography 50.0.1"]
+
     def test_failed_entry_shows_error_and_skips_version_fields(self):
         markdown = render_entry(make_details(error="pull failed: unauthorized"))
         assert ":warning: FAILED - pull failed: unauthorized" in markdown

@@ -117,4 +117,6 @@ class ExecutionEnvironmentDetails(BaseModel):
     python_version: str | None = None
     jinja_version: str | None = None
     collections: dict[str, str] = {}
+    # Only populated when config.toml's [output].include_pip_packages is true.
+    python_packages: dict[str, str] = {}
     error: str | None = None

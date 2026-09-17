@@ -3,7 +3,8 @@
 Produces a per-image doc summarizing ansible-core/python/jinja versions and
 the full list of installed collections (in a code block, one per line), so
 developers have a quick reference without needing to pull the images
-themselves.
+themselves. If pip package data was collected (see aap-ee-inspect
+--pip-list), it is rendered in a second code block per image.
 
 Usage:
     aap-ee-report
@@ -87,6 +88,17 @@ def render_entry(details: ExecutionEnvironmentDetails) -> str:
         lines.append("_No collections found._")
 
     lines.append("")
+
+    if details.python_packages:
+        lines.append(f"- **Python packages installed (pip list)**: {len(details.python_packages)}")
+        lines.append("")
+        lines.append("```")
+        lines.extend(
+            f"{name} {details.python_packages[name]}" for name in sorted(details.python_packages)
+        )
+        lines.append("```")
+        lines.append("")
+
     return "\n".join(lines)
 
 

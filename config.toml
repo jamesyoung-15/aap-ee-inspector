@@ -10,6 +10,11 @@ dir = "outputs"
 # Fields to keep in execution_environments.json. Comment out / remove to
 # keep every field returned by the AAP API.
 fields = ["name", "image", "description"]
+# Opt-in: also run `pip list` inside each EE image during inspection and
+# record installed Python packages. Off by default since the package list
+# can be very large (hundreds of transitive dependencies) and significantly
+# bloats output files. Can also be enabled per-run with `aap-ee-inspect --pip-list`.
+include_pip_packages = false
 
 [container]
 # Container engine used to pull/run/remove EE images. Must be one of

@@ -26,6 +26,10 @@ class TestAppConfigDefaults:
         config = AppConfig()
         assert config.container.engine == "podman"
 
+    def test_default_include_pip_packages_is_false(self):
+        config = AppConfig()
+        assert config.output.include_pip_packages is False
+
     def test_new_output_file_paths_include_timestamp(self):
         config = AppConfig()
         assert config.new_output_file("20260101T120000") == Path(
@@ -115,3 +119,10 @@ class TestLoadConfig:
 
         with pytest.raises(ValidationError):
             load_config(path=toml_path)
+
+    def test_loads_include_pip_packages_from_toml(self, tmp_path):
+        toml_path = tmp_path / "config.toml"
+        toml_path.write_text("[output]\ninclude_pip_packages = true\n")
+
+        config = load_config(path=toml_path)
+        assert config.output.include_pip_packages is True
