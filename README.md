@@ -24,6 +24,20 @@ to target a specific historical run instead. See
 [docs/README.md](docs/README.md) for a breakdown of how the pipeline works
 internally.
 
+## Purpose
+
+Personal utility project for work at AmFam. Our core Ansible automation lives in a large monorepo
+covering a wide range of targets — RHEL 8, RHEL 9, Windows 2016, Windows 2022, and beyond — which
+means we use many different EEs across many different job templates rather than pinning to one.
+Maintaining a single `requirements.yml` override isn't viable at that scale: the collection
+requirements vary too much between platform teams and OS generations.
+
+The EE source repo only documents the 10-15 *direct* collection dependencies APS explicitly added.
+The images that actually run in AAP contain 40-65+ collections once the Red Hat base image's
+bundled content is factored in. This tool fills that gap — inspecting every deployed EE image
+and producing a single reference of what's actually available at runtime. See
+[docs/README.md](docs/README.md#purpose) for more detail.
+
 ## Requirements
 
 - Python 3.13+ and [uv](https://docs.astral.sh/uv/)

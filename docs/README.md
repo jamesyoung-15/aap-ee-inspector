@@ -1,4 +1,42 @@
-# Architecture
+# Docs
+
+## Purpose
+
+The [EE source repository](https://gitlab.com/amfament/ent/ets/aps/configuration-management/aap/configuration/execution-environments)
+defines what APS *intends* each Execution Environment to contain: a handful
+of direct collection entries in `requirements.yml` and a pinned `ansible-core`
+version in `execution-environment.yml`. For `amfam_default_rhel9`, that's
+around 11 direct collection dependencies.
+
+But the image that actually runs your job template contains far more. The
+upstream `ee-supported-rhel9` base image from Red Hat ships dozens of its own
+certified collections on top of whatever APS adds — the latest RHEL9 EE has
+65 collections at runtime, not 11. The EE source repo has no record of those
+base-image-bundled collections, their versions, or how they change between EE
+releases.
+
+This creates a practical gap for teams running a large monorepo that targets
+multiple OS generations (RHEL 8, RHEL 9, RHEL 10 incoming) and spreads
+automation across many different EEs:
+
+- **The EE source repo answers**: "What did APS pin as a direct dependency?"
+- **This tool answers**: "What can my playbook actually call at runtime, across every deployed EE version, right now?"
+
+Those are different questions. Common situations where the distinction matters:
+
+- *"Does `amfam_default_rhel9` have `microsoft.iis`?"* — it does, bundled by
+  the base image, not listed anywhere in the source repo.
+- *"Which is the earliest EE with `community.vmware` ≥ 6.0?"* — visible
+  immediately in the report; would otherwise require manually diffing registry
+  manifests or pulling images.
+- *"We're moving job templates from `amfam_default:1.8` to
+  `amfam_default_rhel9:1.1` — what changed?"* — diff the two report sections;
+  the ansible-core jump (2.14 → 2.16), Python jump (3.9 → 3.12), and
+  collection version changes are all in one place.
+- *"A new RHEL10 EE just shipped — what's different from RHEL9?"* — without
+  pulling anything, the published report shows the delta.
+
+## Architecture
 
 This tool is a 3-stage pipeline. Each stage writes into (and, for stages 2
 and 3, reads from) a shared **run directory**, so all output from a single

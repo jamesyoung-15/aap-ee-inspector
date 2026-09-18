@@ -7,27 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-17
+
 ### Added
 
 - `aap-ee-publish` (`publish_confluence_report.py`): new CLI entry that reads
   the latest `execution_environment_details.json` and publishes a full-page
   Confluence update using Confluence storage-format XHTML with native
-  code-block macros (no lossy Markdown conversion). Includes a static
+  code-block macros (no lossy Markdown conversion). Includes an optional
   hand-written intro from `templates/confluence_intro.md` (Jinja2 + Markdown
-  → HTML) and an excluded-EE footnote from `config.toml`'s
-  `[exclusions].name_patterns`. Configured via `CONFLUENCE_BASE_URL`,
-  `CONFLUENCE_EMAIL`, `CONFLUENCE_API_TOKEN` in `.env` and
-  `[confluence].page_id` in `config.toml`. Supports `--only` and `--input`.
-  Verified end-to-end against a live Confluence page.
-- `confluence_report.py`: Confluence storage-format XHTML renderer mirroring
-  the existing Markdown renderer in `generate_report.py`, rendering
-  collections and pip packages as native `<ac:structured-macro ac:name="code">`
-  macros (language: none, CDATA bodies).
-- `templates/confluence_intro.md`: version-controlled, hand-editable source
-  for the static intro section of the Confluence page.
-- `[confluence].page_id` in `config.toml`: non-secret Confluence page target.
-- `ConfluenceSettings` in `config.py`: pydantic-settings class loading
-  Confluence auth from `.env`.
+  → HTML, gitignored — copy from `.example` to use) and an excluded-EE
+  footnote from `config.toml`'s `[exclusions].name_patterns`. Configured via
+  `CONFLUENCE_BASE_URL`, `CONFLUENCE_EMAIL`, `CONFLUENCE_API_TOKEN` in `.env`
+  and `[confluence].page_id` in `config.toml`. Supports `--only` and
+  `--input`. Verified end-to-end against a live Confluence page.
+- `confluence_report.py`: Confluence storage-format XHTML renderer producing
+  native `<ac:structured-macro ac:name="code">` blocks (language: none, CDATA
+  bodies) rather than a lossy Markdown conversion.
+- `templates/confluence_intro.md.example`: generic reference template for the
+  optional page intro; `templates/confluence_intro.md` (actual, gitignored)
+  can be edited freely without affecting git history.
+- `[confluence].page_id` in `config.toml` and `ConfluenceSettings` in
+  `config.py` for auth loaded from `.env`.
+- Purpose/motivation section in README explaining the gap between EE source
+  definitions and runtime-installed collections.
 
 ## [0.1.0] - 2026-09-17
 
