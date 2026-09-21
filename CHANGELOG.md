@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-17
+
+### Added
+
+- Table of contents on the Confluence published page: a native Confluence
+  `toc` macro is inserted between the intro and the report body, rendering
+  a linked list of all EE names for quick navigation. Auto-updates on each
+  `aap-ee-publish` run; filtered to `maxLevel=2` (EE headings only,
+  excludes the "Excluded Execution Environments" footnote).
+
 ## [0.2.0] - 2026-09-17
 
 ### Added
