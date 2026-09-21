@@ -69,14 +69,29 @@ def render_intro_html() -> str:
     return markdown.markdown(intro_markdown)
 
 
+_TOC_MACRO = (
+    '<ac:structured-macro ac:name="toc">'
+    '<ac:parameter ac:name="maxLevel">2</ac:parameter>'
+    '<ac:parameter ac:name="exclude">Excluded Execution Environments</ac:parameter>'
+    "</ac:structured-macro>"
+)
+
+
 def build_page_body(
     all_details: list[ExecutionEnvironmentDetails], exclusions_name_patterns: list[str]
 ) -> str:
-    """Assemble the full Confluence storage-format page body."""
+    """Assemble the full Confluence storage-format page body.
+
+    Structure: intro (optional) → TOC → report → exclusions footnote.
+    The TOC macro is placed between the intro and the report so it's the
+    first thing readers see; Confluence auto-populates it from the <h2>
+    EE headings at page-load time with no maintenance needed when EEs are
+    added or removed.
+    """
     intro_html = render_intro_html()
     report_html = render_report_storage(all_details)
     footnote_html = render_exclusions_footnote_storage(exclusions_name_patterns)
-    return intro_html + report_html + footnote_html
+    return intro_html + _TOC_MACRO + report_html + footnote_html
 
 
 def get_current_version(client: httpx.Client, base_url: str, page_id: str) -> tuple[int, str]:
